@@ -79,12 +79,17 @@ uint8_t CoapParser::getFirstOptionType() {
   }
 }
 
-uint8_t CoapParser::getFirstOptionValue() {
+char* CoapParser::getFirstOptionValue() {
   
   
 }
 
-uint8_t CoapParser::getNextOption() {
+uint8_t CoapParser::getNextOptionType() {
+  
+}
+
+
+char* CoapParser::getNextOptionValue() {
   
 }
 
