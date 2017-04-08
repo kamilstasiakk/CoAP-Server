@@ -1,7 +1,7 @@
 /*
-  Morse.h - Library for flashing Morse code.
-  Created by David A. Mellis, November 2, 2007.
-  Released into the public domain.
+  CoapPraser.h - Library for parsing CoAP messages.
+  Created by Kamil Stasiak, 2017.
+  Implements only selected parts of the CoAP protocol.
 */
 #ifndef CoapParser_h
 #define CoapParser_h
@@ -14,12 +14,14 @@ class CoapParser
     const int FIELD_MAX_LENGHT = 100;
     char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
     char fieldValue[FIELD_MAX_LENGHT];
-  
+
+    // TYPE (T) fields:
     const uint8_t TYPE_CON = 0;
     const uint8_t TYPE_NON = 1;
     const uint8_t TYPE_ACK = 2;
     const uint8_t TYPE_RST = 3;
-    
+
+    // Code fields:
     //code class - request
     const uint8_t CLASS_REQ = 0;
     //code class - success response
@@ -50,6 +52,9 @@ class CoapParser
     char* CoapParser::parseToken(char* message, uint8_t tokenLen);
     void CoapParser::parseOptions(char* message);
     uint8_t CoapParser::getOptionsCount();
+    uint8_t CoapParser::getFirstOptionType()
+    uint8_t CoapParser::getFirstOptionValue();
+    uint8_t CoapParser::getNextOption();
     uint8_t CoapParser::getPayloadSize();
    
   private:
