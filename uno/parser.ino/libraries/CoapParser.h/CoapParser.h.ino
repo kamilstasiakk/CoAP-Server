@@ -52,9 +52,10 @@ class CoapParser
     char* CoapParser::parseToken(char* message, uint8_t tokenLen);
     void CoapParser::parseOptions(char* message);
     uint8_t CoapParser::getOptionsCount();
-    uint8_t CoapParser::getFirstOptionType()
-    uint8_t CoapParser::getFirstOptionValue();
-    uint8_t CoapParser::getNextOption();
+    uint8_t CoapParser::getFirstOptionType();
+    char* CoapParser::getFirstOptionValue();
+    uint8_t CoapParser::getNextOptionType() ;
+    char* CoapParser::getNextOptionValue();
     uint8_t CoapParser::getPayloadSize();
    
   private:
