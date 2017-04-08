@@ -14,8 +14,6 @@ CoapParser::CoapParser(){}
 int CoapParser::parseVersion(char* message)
 {
   return ((message[0] & 0xb0) >> 6);
-  //reply[0] = reply[0] & 0xb0;
-  //reply[0] = reply[0] + (value & 0x03) ;
 }
 
 uint8_t CoapParser::parseType(char* message)
@@ -26,7 +24,7 @@ uint8_t CoapParser::parseType(char* message)
 //tylko wartosci 0-8 poprawne
 uint8_t CoapParser::parseTokenLen(char* message)
 {
-  return ((message[0] & 0x0f) >> 0);
+  return ((message[0] & 0x0f));
 }
 
 
@@ -38,7 +36,7 @@ uint8_t CoapParser::parseCodeClass(char* message)
 
 uint8_t CoapParser::parseCodeDetail(char* message)
 {
-  return ((message[1] & 0x1f) >> 0);
+  return ((message[1] & 0x1f));
 }
 
 
@@ -69,15 +67,56 @@ void CoapParser::parseOptions(char* message)
   }
 }
 //0 - brak opcji
-uint8_t CoapParser::getFirstOptionType() {
-  _currentOptionNumber = 4 + _tokenLen;
-  if (message[currentOptionStart] == 0xff) {
-    return 0;
-  }
-  else {
-    
+//zwraca typ opcji, wartosc wyciagamy z pola fieldValue
+uint32_t CoapParser::getFirstOption(char* message) {
+  _currentOptionStart = 4 + parseTokenLen(message);
+  if (message
+  uint8_t type = (uint8_t) message[currentOptionStart] & 0xf0;
+  
+  switch (type) {
+    case 13:
+      int optiontype = message[_currentOptionStart+1] + 13;
+      for (int i = 0; i < optionLen; i++) {
+        
+      }
+      return optiontype;
+      break;
+    case 14:
+      return message[_currentOptionStart+1] << 8 + message[_currentOptionStart+2] + 269;
+      break;
+    case 15:
+      return 0;
+      break;
+    default: 
+      return len;
+    break;
   }
 }
+
+
+uint32_t CoapParser::getOptionLen(char* message, uint8_t start) {
+  uint8_t len = (uint8_t) message[currentOptionStart] & 0xf0;
+  
+  switch (len) {
+    case 13:
+      int optionLen = message[_currentOptionStart+1] + 13;
+      for (int i = 0; i < optionLen; i++) {
+        
+      }
+      return optionLen;
+      break;
+    case 14:
+      return message[_currentOptionStart+1] << 8 + message[_currentOptionStart+2] + 269;
+      break;
+    case 15:
+      return 0;
+      break;
+    default: 
+      return len;
+    break;
+  }
+}
+
 
 char* CoapParser::getFirstOptionValue() {
   

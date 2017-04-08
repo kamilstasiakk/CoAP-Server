@@ -8,12 +8,19 @@
 
 #include "Arduino.h"
 
+//nie robilem tego jako parse() i zapisywaie wartosci do pół + gettery, bo szkoda pamieci
+//jesli w arduino nie ejst zla praktyka tworzenie obiektow w loopie to warto przerobic to troche - popki co widziałem
+tylko biekty deklarowane w globalnych zmiennych
+
 class CoapParser
 {
   public:
     const int FIELD_MAX_LENGHT = 100;
     char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
     char fieldValue[FIELD_MAX_LENGHT];
+
+
+typedef struct record Record;
 
     // TYPE (T) fields:
     const uint8_t TYPE_CON = 0;
@@ -61,7 +68,6 @@ class CoapParser
   private:
     uint8_t _currentOptionStart;
     uint8_t _payloadStart;
-    uint8_t _tokenLen;
 };
 
 #endif
