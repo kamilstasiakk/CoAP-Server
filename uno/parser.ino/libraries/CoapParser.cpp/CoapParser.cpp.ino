@@ -70,12 +70,14 @@ void CoapParser::parseOptions(char* message)
 //zwraca typ opcji, wartosc wyciagamy z pola fieldValue
 uint32_t CoapParser::getFirstOption(char* message) {
   _currentOptionStart = 4 + parseTokenLen(message);
+  //TODO: sprawdzic czy nie koniec
   if (message
   uint8_t type = (uint8_t) message[currentOptionStart] & 0xf0;
   
   switch (type) {
     case 13:
       int optiontype = message[_currentOptionStart+1] + 13;
+      uint32_t optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+2)
       for (int i = 0; i < optionLen; i++) {
         
       }
@@ -94,19 +96,15 @@ uint32_t CoapParser::getFirstOption(char* message) {
 }
 
 
-uint32_t CoapParser::getOptionLen(char* message, uint8_t start) {
-  uint8_t len = (uint8_t) message[currentOptionStart] & 0xf0;
+uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint8_t startExtended) {
+  uint8_t len = (uint8_t) (message[startBase] & 0x0f);
   
   switch (len) {
     case 13:
-      int optionLen = message[_currentOptionStart+1] + 13;
-      for (int i = 0; i < optionLen; i++) {
-        
-      }
-      return optionLen;
+      return message[startExtended] + 13;
       break;
     case 14:
-      return message[_currentOptionStart+1] << 8 + message[_currentOptionStart+2] + 269;
+      return message[startExtended] << 8 + message[startExtended + 1] + 269;
       break;
     case 15:
       return 0;
