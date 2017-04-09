@@ -50,24 +50,24 @@ typedef struct record Record;
     const uint8_t DETAIL_DELETE = 4;
 
     CoapParser();
-    int CoapParser::parseVersion(char* message);
-    uint8_t CoapParser::parseType(char* message);
-    uint8_t CoapParser::parseTokenLen(char* message);
-    uint8_t CoapParser::parseCodeClass(char* message);
-    uint8_t CoapParser::parseCodeDetail(char* message);
-    uint16_t CoapParser::parseMessageId(char* message);
-    char* CoapParser::parseToken(char* message, uint8_t tokenLen);
-    void CoapParser::parseOptions(char* message);
-    uint8_t CoapParser::getOptionsCount();
-    uint8_t CoapParser::getFirstOptionType();
-    char* CoapParser::getFirstOptionValue();
-    uint8_t CoapParser::getNextOptionType() ;
-    char* CoapParser::getNextOptionValue();
-    uint8_t CoapParser::getPayloadSize();
+    int parseVersion(char* message);
+    uint8_t parseType(char* message);
+    uint8_t parseTokenLen(char* message);
+    uint8_t parseCodeClass(char* message);
+    uint8_t parseCodeDetail(char* message);
+    uint16_t parseMessageId(char* message);
+    char* parseToken(char* message, uint8_t tokenLen);
+    void parseOptions(char* message);
+    uint8_t getOptionsCount();
+    uint32_t getFirstOption(char* message);
+    uint32_t getNextOption(char* message) ;
+    uint8_t getPayloadSize();
    
   private:
     uint8_t _currentOptionStart;
     uint8_t _payloadStart;
+    uint32_t getOptionLen(char* message, uint8_t startBase, uint8_t startExtended);
+    uint32_t computeOptLenOffset(uint32_t optionLen);
 };
 
 #endif
