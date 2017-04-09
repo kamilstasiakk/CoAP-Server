@@ -15,7 +15,7 @@ tylko biekty deklarowane w globalnych zmiennych
 class CoapParser
 {
   public:
-    const int FIELD_MAX_LENGHT = 100;
+    const int FIELD_MAX_LENGHT = 200;
     char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
     char fieldValue[FIELD_MAX_LENGHT];
 
@@ -57,11 +57,10 @@ typedef struct record Record;
     uint8_t parseCodeDetail(char* message);
     uint16_t parseMessageId(char* message);
     char* parseToken(char* message, uint8_t tokenLen);
-    void parseOptions(char* message);
-    uint8_t getOptionsCount();
     uint32_t getFirstOption(char* message);
     uint32_t getNextOption(char* message) ;
     uint8_t getPayloadSize();
+    char* parsePayload(char* message);
    
   private:
     uint8_t _currentOptionStart;
