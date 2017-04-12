@@ -8,43 +8,45 @@
 
 CoapParser::CoapParser(){}
 
-//Poprawic fukcje - przesuniecie jeszcze dodac!
-
 //tylko wartosc 1 poprawna
 int CoapParser::parseVersion(char* message)
 {
   return ((message[0] & 0xb0) >> 6);
 }
 
+//zwraca wartość pola type, wartości te opisane są jako stałe TYPE_*
 uint8_t CoapParser::parseType(char* message)
 {
   return ((message[0] & 0x30) >> 4);
 }
 
-//tylko wartosci 0-8 poprawne
+//zwraca długość tokena, tylko wartosci 0-8 poprawne
 uint8_t CoapParser::parseTokenLen(char* message)
 {
   return ((message[0] & 0x0f));
 }
 
 
-//tylko wartosci {0,2,4,5} poprawne
+//zwraca kod klasy, tylko wartosci {0,2,4,5} poprawne - stałe CLASS_*
 uint8_t CoapParser::parseCodeClass(char* message)
 {
   return ((message[1] & 0xe0) >> 5);
 }
 
-uint8_t CoapParser::parseCodeDetail(char* message)
+//zwraca dodatkowe info o kodzie - stałe DETAIL_*
+uint8_t CoapParser::parseCodeDetail(char* message) 
 {
   return ((message[1] & 0x1f));
 }
 
-
+//zwraca message ID
 uint16_t CoapParser::parseMessageId(char* message)
 {
   return ((message[2]& 0xff) << 8  + message[3]);
 }
 
+// zwraca wskaznik na tablice, w ktorej zapisany jest Token, 
+//należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char*
 char* CoapParser::parseToken(char* message, uint8_t tokenLen) 
 {
   uint8_t byteNumber;
@@ -69,7 +71,7 @@ void CoapParser::parseOptions(char* message)
 
 //0 - brak opcji
 //zwraca typ opcji, wartosc wyciagamy z pola fieldValue
-uint32_t CoapParser::getNextOption(char* message) {
+uint32_t CoapParser::getFirstOption(char* message) {
   _currentOptionStart = 4 + parseTokenLen(message);
   getNextOption(message);
 }

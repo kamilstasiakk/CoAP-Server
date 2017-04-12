@@ -51,11 +51,18 @@ typedef struct record Record;
 
     CoapParser();
     int parseVersion(char* message);
+    //zwraca wartość pola type, wartości te opisane są jako stałe TYPE_*
     uint8_t parseType(char* message);
+    //zwraca długość tokena, tylko wartosci 0-8 poprawne
     uint8_t parseTokenLen(char* message);
+    //zwraca kod klasy, tylko wartosci {0,2,4,5} poprawne - stałe CLASS_*
     uint8_t parseCodeClass(char* message);
+    //zwraca dodatkowe info o kodzie - stałe DETAIL_*
     uint8_t parseCodeDetail(char* message);
+    //zwraca message ID
     uint16_t parseMessageId(char* message);
+    // zwraca wskaznik na tablice, w ktorej zapisany jest Token, 
+//należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char*
     char* parseToken(char* message, uint8_t tokenLen);
     void parseOptions(char* message);
     uint8_t getOptionsCount();
