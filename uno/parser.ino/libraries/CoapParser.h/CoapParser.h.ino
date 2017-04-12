@@ -10,7 +10,7 @@
 
 //nie robilem tego jako parse() i zapisywaie wartosci do pół + gettery, bo szkoda pamieci
 //jesli w arduino nie ejst zla praktyka tworzenie obiektow w loopie to warto przerobic to troche - popki co widziałem
-tylko biekty deklarowane w globalnych zmiennych
+//tylko obiekty deklarowane w globalnych zmiennych
 
 class CoapParser
 {
@@ -62,11 +62,22 @@ typedef struct record Record;
     //zwraca message ID
     uint16_t parseMessageId(char* message);
     // zwraca wskaznik na tablice, w ktorej zapisany jest Token, 
-//należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char*
+    //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
+    //geOption
     char* parseToken(char* message, uint8_t tokenLen);
+    // zwraca numer pierwszej opcji, jej wartość zapisana jest w polu fieldValue, 
+    //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
+    //geOption
     uint32_t getFirstOption(char* message);
+    // zwraca numer kolejnej opcji, jej wartość zapisana jest w polu fieldValue, 
+    //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
+    //geOption
     uint32_t getNextOption(char* message) ;
+    //zwraca długość pola danych
     uint8_t getPayloadSize();
+    // zwraca wskaznik na tablice, w ktorej zapisany jest payload, 
+    //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
+    //geOption
     char* parsePayload(char* message);
    
   private:
