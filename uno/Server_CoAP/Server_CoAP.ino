@@ -33,6 +33,7 @@ RF24Network network(radio);
 // variable connected with wired connection
 EthernetUDP Udp;
 byte mac[] = {00,0xaa,0xbb,0xcc,0xde,0xf3};
+IPAddress ip(192, 168, 1, 250);
 short localPort = 1237;
 const uint8_t MAX_BUFFER = 100; //do zastanowienia
 char ethMessage[MAX_BUFFER];
@@ -76,27 +77,26 @@ void initializeResourceList() {
   resources[1].flags = B00000011;
 
   // metryka PacketLossRate
-  resources[0].uri = "/metric/PLR";
-  resources[0].rt = "PacketLossRate";
-  resources[0].if = "value";
-  resources[0].value = 0; //OFF
-  resources[0].flags = B00000000;
+  resources[2].uri = "/metric/PLR";
+  resources[2].rt = "PacketLossRate";
+  resources[2].if = "value";
+  resources[2].value = 0; //OFF
+  resources[2].flags = B00000000;
 
   // metryka ByteLossRate
-  resources[0].uri = "/metric/BLR";
-  resources[0].rt = "ByteLossRate";
-  resources[0].if = "value";
-  resources[0].value = 0;
-  resources[0].flags = B00000000;
+  resources[3].uri = "/metric/BLR";
+  resources[3].rt = "ByteLossRate";
+  resources[3].if = "value";
+  resources[3].value = 0;
+  resources[3].flags = B00000000;
 
   // metryka MeanAckDelay
-  resources[0].uri = "/metric/MAD";
-  resources[0].rt = "Lamp";
-  resources[0].if = "value";
-  resources[0].value = 0;
-  resources[0].flags = B00000000;
+  resources[4].uri = "/metric/MAD";
+  resources[4].rt = "Lamp";
+  resources[4].if = "value";
+  resources[4].value = 0;
+  resources[4].flags = B00000000;
 }
-
 // End:Resources--------------------------------
 
 
@@ -130,14 +130,18 @@ void receiveRF24Message() {
  *  - jeżeli dotyczy zasobu przycisk, to zapisujemy czas przyjścia wiadomości;
 */
 void processRF24Message(byte message){ 
-    if ( ((rf24Message & 0x02) >> 1) == LAMP ){
-      lampState = (rf24Message & 0x01);
-    }
-    else {
-      buttonState = millis();
-    }
+    uint8_t resourceID = ((rf24Message & 0x02) >> 1);
 
-    // jeżeli obiekt ma możliwośc bycia obserwowanym, to uruchom procedurę ObservationProcess()
+    for(int i=0; i<resources.length(); i++) {
+      if ( (resources[i].flags & 0x06) >> 1 ) == resourceID ){
+           if ( resourceID == 1 ) {
+            resources[i].value = (uint16_t)millis();
+           }
+           else {
+            resources[i].value = (rf24Message & 0x01);
+           }
+      }
+    }
 }
 
 /* 
@@ -156,7 +160,7 @@ void sendRF24Message(byte message) {
  *  - przypisujemy adres MAC oraz numer portu;
 */
 void initializeEthernetCommunication(){
-  Ethernet.begin(mac);
+  Ethernet.begin(mac, ip);
   Udp.begin(localPort);
   //przypisać jakiś konkretny adres ip
 }
