@@ -18,7 +18,8 @@
 #include <EthernetUdp.h>
 
 // include our librares; 
-#include CoapParser_h
+#include <CoapParser_h>
+#include <Resource.h>
 
 // constant variables neccessary for RF24 wireless connection;
 const uint16_t THIS_NODE_ID = 1;
@@ -28,40 +29,90 @@ const uint8_t RF_CHANNEL = 60;
 // variable connected with wireless object
 RF24 radio(7,8);  // pin CE=7, CSN=8
 RF24Network network(radio);
-const uint8_t LAMP = 0;
-const uint8_t BUTTON = 1;
-uint8_t lampState;  //0 - ON, 1 - OFF
-uint32_t buttonState; // incomming time marker  
-
 
 // variable connected with wired connection
 EthernetUDP Udp;
 byte mac[] = {00,0xaa,0xbb,0xcc,0xde,0xf3};
-short localPort=1237;
+short localPort = 1237;
 const uint8_t MAX_BUFFER = 100; //do zastanowienia
 char ethMessage[MAX_BUFFER];
 
-void setup() {  
+// other variables:
+Resource resources[5];
+Etag etags[20];
+Observator observators[5];
+uint32_t observCounter;
+
+void setup() {
+  SPI.begin();
   initializeRF24Communication();
   initializeEthernetCommunication();
+
+  initializeResourceList();
 }
 
 void loop() {
   // checking the network object regularly;
   network.update();
-  
+  receiveRF24Message();
 }
 
 
 
-// RF24 Methodes--------------------------------
-// initiation of wireless variables and network connections
+// Resources:Methodes---------------------------
+void initializeResourceList() {
+  // lampka
+  resources[0].uri = "/sensor/lamp";
+  resources[0].rt = "Lamp";
+  resources[0].if = "state";
+  resources[0].value = 0; //OFF
+  resources[0].flags = B00000000;
+
+  // przycisk
+  resources[1].uri = "/sensor/btn";
+  resources[1].rt = "Button";
+  resources[1].if = "state";
+  resources[1].value = 0;
+  resources[1].flags = B00000011;
+
+  // metryka PacketLossRate
+  resources[0].uri = "/metric/PLR";
+  resources[0].rt = "PacketLossRate";
+  resources[0].if = "value";
+  resources[0].value = 0; //OFF
+  resources[0].flags = B00000000;
+
+  // metryka ByteLossRate
+  resources[0].uri = "/metric/BLR";
+  resources[0].rt = "ByteLossRate";
+  resources[0].if = "value";
+  resources[0].value = 0;
+  resources[0].flags = B00000000;
+
+  // metryka MeanAckDelay
+  resources[0].uri = "/metric/MAD";
+  resources[0].rt = "Lamp";
+  resources[0].if = "value";
+  resources[0].value = 0;
+  resources[0].flags = B00000000;
+}
+
+// End:Resources--------------------------------
+
+
+// RF24:Methodes--------------------------------
+/* 
+ *  Metoda odpowiedzialna za inicjalizację parametrów interfejsu radiowego:
+ *  - przypisujemy identyfikator interfejsu radiowego oraz numer kanału, na którym będzie pracował; 
+*/
 void initializeRF24Communication(){
-  SPI.begin();
   radio.begin();
   network.begin(RF_CHANNEL, THIS_NODE_ID); 
 }
 
+/* 
+ *  Metoda odpowiedzialna za odebranie danych dopóki są one dostepne na interfejsie radiowym.
+*/
 void receiveRF24Message() {
   while ( network.available() )
   {
@@ -72,6 +123,12 @@ void receiveRF24Message() {
     processRF24Message(byte rf24Message);
   }
 }
+
+/* 
+ *  Metoda odpowiedzialna za przetworzenie odebranych danych o statusie zasobu:
+ *  - jeżeli dotyczy zasobu lampka, to odczytujemy stan zasobu zgodnie z dokumentacją; 
+ *  - jeżeli dotyczy zasobu przycisk, to zapisujemy czas przyjścia wiadomości;
+*/
 void processRF24Message(byte message){ 
     if ( ((rf24Message & 0x02) >> 1) == LAMP ){
       lampState = (rf24Message & 0x01);
@@ -79,18 +136,34 @@ void processRF24Message(byte message){
     else {
       buttonState = millis();
     }
+
+    // jeżeli obiekt ma możliwośc bycia obserwowanym, to uruchom procedurę ObservationProcess()
 }
+
+/* 
+ *  Metoda odpowiedzialna za wysyłanie danych interfejsem radiowym.
+ *  - parametr message oznacza wiadomość, którą chcemy wysłać;
+*/
 void sendRF24Message(byte message) {
     RF24NetworkHeader header;
     network.write(header, &message, sizeof(message));
 }
-// END RF23_Methodes----------------------------
+// END:RF23_Methodes----------------------------
 
-// Ethernet_Methodes----------------------------
+// START:Ethernet_Methodes----------------------------
+/* 
+ *  Metoda odpowiedzialna za inicjalizację parametrów interfejsu ethernetowego:
+ *  - przypisujemy adres MAC oraz numer portu;
+*/
 void initializeEthernetCommunication(){
   Ethernet.begin(mac);
   Udp.begin(localPort);
+  //przypisać jakiś konkretny adres ip
 }
+
+/* 
+ *  Metoda odpowiedzialna za odbieranie wiadomości z interfejsu ethernetowego
+*/
 void receiveEthernetMessage() {
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if(packetSize) {
@@ -99,10 +172,31 @@ void receiveEthernetMessage() {
       processEthernetMessage();  
     }
 }
+
+/* 
+ *  
+*/
 void processEthernetMessage(){ 
 }
-void sendEthernetMessage(byte message){
-  Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
-}
-// END Ethernet_Methodes------------------------
 
+/* 
+ *  Metoda odpowiedzialna za wysyłanie wiadomości poprzez interfejs ethernetowy:
+ *  - message jest wiadomością, którą chcemy wysłać
+ *  - ip jest adresem ip hosta, do którego adresujemy wiadomość np:IPAddress adres(10,10,10,1)
+ *  - port jest numerem portu hosta, do którego adresuemy wiadomość
+*/
+void sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16_t port){
+  Udp.beginPacket(ip), port);
+  int r = Udp.write(message, messageSize);
+  Udp.endPacket();
+  
+  //jeżeli liczba danych przyjętych do wysłania przez warstwę niższą jest mniejsza niż rozmiar wiadomości to?
+  if ( r < messageSize ) {
+      
+  }
+}
+// END:Ethernet_Methodes------------------------
+
+
+// START:StateMethodes---------------------------
+// END:StateMethodes-----------------------------
