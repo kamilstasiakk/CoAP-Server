@@ -57,22 +57,12 @@ char* CoapParser::parseToken(char* message, uint8_t tokenLen)
    return fieldValue;
 }
 
-void CoapParser::parseOptions(char* message)
-{
-  _optionsCount = 0;
-  int currentOptionStart = 4 + parseTokenLen(message);
-  //while it is not equal payload marker do counting
-  while (message[currentOptionStart] != 0xff) {
-    _optionsCount++;
-    
-    currentOptionStart += message[currentOptionStart]
-  }
-}
 
 //0 - brak opcji
 //zwraca typ opcji, wartosc wyciagamy z pola fieldValue
 uint32_t CoapParser::getFirstOption(char* message) {
   _currentOptionStart = 4 + parseTokenLen(message);
+  _payloadStart = 0;
   getNextOption(message);
 }
 
@@ -83,7 +73,7 @@ uint32_t CoapParser::getNextOption(char* message) {
   if (strlen(message) <= _currentOptionStart)
     return 0;
     
-  uint8_t type = (uint8_t) message[currentOptionStart] & 0xf0;
+  uint8_t type = (uint8_t) message[_currentOptionStart] & 0xf0;
   
   switch (type) {
     case 13:
@@ -111,6 +101,7 @@ uint32_t CoapParser::getNextOption(char* message) {
       return optiontype;
       break;
     case 15:
+      _payloadStart = _currentOptionStart + 1;
       return 0;
       break;
     default: 
@@ -128,7 +119,7 @@ uint32_t CoapParser::getNextOption(char* message) {
 }
 
 
-uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint8_t startExtended) {
+private uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint8_t startExtended) {
   uint8_t len = (uint8_t) (message[startBase] & 0x0f);
   
   switch (len) {
@@ -148,7 +139,7 @@ uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint8_t star
 }
 
 //okreslamy przesuniecie poczatku pola wartosc opcji spowodowane extended option len
-uint32_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
+private uint32_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
   if (optionLen < 13) 
         return 0;
       else if (optionLen < 269)
@@ -157,6 +148,17 @@ uint32_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
         return 2;
 }
 
+
+char* CoapParser::parsePayload(char* message) {
+  for (int i = _payloadStart; i < strlen(message); i++) {
+    fieldValue[i - _payloadStart] = message[i];
+  }
+  return fieldValue;
+}
+
+uint8_t CoapParser::getPayloadSize() {
+  return strlen(message) - _payloadStart;
+}
 
 
 
