@@ -32,11 +32,14 @@ struct observator
 
 struct session
 {
-  char token[8];
   IPAddress ipAddress;
   uint16_t portNumber;
+  char token[8];
+  uint8_t id;
+  
   //MSB - 0.active / 1.nonactive
-  char contentFormat = 188;//j - json, x- xml, t -text
+  //j - json, x- xml, t -text
+  char contentFormat = 188;
 } Session;
 
 
@@ -54,8 +57,12 @@ uint8_t MAX_SESSIONS_COUNT = 5;
 uint8_t MAX_ETAG_COUNT = 20;
 uint8_t MAX_OBSERVATORS_COUNT = 5;
 
+// error codes
 uint16_t BAD_REQUEST = 400;
-uint16_t NOT_FOUND = 400;
+uint16_t NOT_FOUND = 404;
+uint16_t METHOD_NOT_ALLOWED = 402;
+uint16_t INTERNAL_SERVER_ERROR = 500;
+
 uint16_t ETAG = 4;
 uint16_t URI_PATH = 11;
 uint16_t CONTENT-FORMAT = 12;
@@ -63,6 +70,8 @@ uint16_t ACCEPT = 17;
 uint16_t NO_OPTION = 0;
 
 uint8_t PLAIN_TEXT = 0;
+uint8_t XML = 41;
+uint8_t JSON = 50;
 
 // TYPE (T) fields:
 const uint8_t TYPE_CON = 0;

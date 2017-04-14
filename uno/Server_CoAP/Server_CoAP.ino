@@ -42,7 +42,7 @@ short localPort = 1237;
 const uint8_t MAX_BUFFER = 100; //do zastanowienia
 char ethMessage[MAX_BUFFER];
 
-// other variables:
+// CoAP variables:
 Resource resources[RESOURCES_COUNT];
 Session sessions[MAX_SESSIONS_COUNT];
 Etag etags[MAX_ETAG_COUNT];
@@ -102,7 +102,7 @@ void initializeResourceList() {
 
   // metryka MeanAckDelay
   resources[4].uri = "/metric/MAD";
-  resources[4].rt = "Lamp";
+  resources[4].rt = "MeanACKDelay";
   resources[4].if = "value";
   resources[4].value = 0;
   resources[4].flags = B00000000;
@@ -120,7 +120,6 @@ void initializeRF24Communication(){
   radio.begin();
   network.begin(RF_CHANNEL, THIS_NODE_ID); 
 }
-
 /* 
  *  Metoda odpowiedzialna za odebranie danych dopóki są one dostepne na interfejsie radiowym.
 */
@@ -131,26 +130,9 @@ void receiveRF24Message() {
     byte rf24Message;
     network.read(header, rf24Message, sizeof(rf24Message));
 
-    processRF24Message(byte rf24Message);
+    getMessageFromThing(byte rf24Message);
   }
 }
-
-/* 
- *  Metoda odpowiedzialna za przetworzenie odebranych danych o statusie zasobu:
- *  - jeżeli dotyczy zasobu lampka, to odczytujemy stan zasobu zgodnie z dokumentacją; 
- *  - jeżeli dotyczy zasobu przycisk, to zapisujemy czas przyjścia wiadomości;
-*/
-void processRF24Message(byte message){ 
-    if ( ((rf24Message & 0x02) >> 1) == LAMP ){
-      lampState = (rf24Message & 0x01);
-    }
-    else {
-      buttonState = millis();
-    }
-
-    // jeżeli obiekt ma możliwośc bycia obserwowanym, to uruchom procedurę ObservationProcess()
-}
-
 /* 
  *  Metoda odpowiedzialna za wysyłanie danych interfejsem radiowym.
  *  - parametr message oznacza wiadomość, którą chcemy wysłać;
@@ -170,7 +152,6 @@ void initializeEthernetCommunication(){
   Ethernet.begin(mac, ip);
   Udp.begin(localPort);
 }
-
 /* 
  *  Metoda odpowiedzialna za odbieranie wiadomości z interfejsu ethernetowego
  *  - jeżeli pakiet ma mniej niż 4 bajty (minimalną wartośc nagłówka) to odrzucamy go;
@@ -179,37 +160,12 @@ void initializeEthernetCommunication(){
 void receiveEthernetMessage() {
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if(packetSize) {
-      if(packetSize >= 4) {
-        Udp.read(ethMessage, MAX_BUFFER) //do zastanowienia 
-        processEthernetMessage(ethMessage)
-      }
+    if(packetSize >= 4) {
+      Udp.read(ethMessage, MAX_BUFFER)
+      getCoapClienMessage(ethMessage);
+    }
   }
 }
-
-/* 
- *  Metoda odpowiedzialna za analizę otrzymanej wiadomości:
- *  - jeżeli wersja wiadomości jest różna od 01, wyślij błąd BAD_REQUEST;
- *  - jeżeli wersja wiadomości jest zgodna, uruchom odpowiednią metodę zależnie od pola CODE detail;
- *  - obsługiwane są tylko wiadomości CODE = EMPTY, GET lub POST;
-*/
-void processEthernetMessage(char* message){ 
-      if (parser.parseVersion(message) !=1 || parser.parseCodeClass(message) != CLASS_REQ)
-        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
-      switch (parser.parseCodeDetail(message)) {
-        case DETAIL_EMPTY:
-          receiveEmptyRequest(message);
-          break;
-        case DETAIL_GET:
-          receiveGetRequest(message);
-          break;
-        case DETAIL_POST:
-          receivePostRequest(message);
-          break;
-        default:
-          sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
-          break;
-}
-
 /* 
  *  Metoda odpowiedzialna za wysyłanie wiadomości poprzez interfejs ethernetowy:
  *  - message jest wiadomością, którą chcemy wysłać
@@ -230,6 +186,33 @@ void sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16
 
 
 // START:CoAP_Methodes---------------------------
+/* 
+ *  Metoda odpowiedzialna za analizę wiadomości CoAP od klienta:
+ *  - jeżeli wersja wiadomości jest różna od 01, wyślij błąd BAD_REQUEST;
+ *  - jeżeli wersja wiadomości jest zgodna, uruchom odpowiednią metodę zależnie od pola CODE detail;
+ *  - obsługiwane są tylko wiadomości CODE = EMPTY, GET lub POST;
+*/
+void getCoapClienMessage(char* message){ 
+      if (parser.parseVersion(message) !=1 || parser.parseCodeClass(message) != CLASS_REQ) {
+        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
+        return;
+      }
+      switch (parser.parseCodeDetail(message)) {
+        case DETAIL_EMPTY:
+          receiveEmptyRequest(message);
+          break;
+        case DETAIL_GET:
+          receiveGetRequest(message);
+          break;
+        case DETAIL_POST:
+          receivePostRequest(message);
+          break;
+        default:
+          sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
+          break;
+}
+
+
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   
 }
@@ -238,6 +221,19 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
   
 }
 
+
+/* 
+ *  Metoda odpowiedzialna za analizę wiadomości typu POST:
+ *  Wiadomość zawiera opcje: URI-PATH, CONTENT-FORMAT oraz payload z nową wartością;
+ *  - odczytujemy opcję URI-PATH (jak nie ma, wysyłamy błąd BAD_REQUEST);
+ *  - szukamy zasobu na serwerze (jak nie ma, wysyłmy bład NOT_FOUND);
+ *  - jeżeli zasób nie ma możliwości zmiany stanu, wtedy wysyłamy bład METHOD_NOT_ALLOWED;
+ *  - szukamy wolnej sesji (jeżeli brak, odrzucamy wiadomość zbłędem serwera INTERNAL_SERVER_ERROR;
+ *  - odczytujemy format zasobu (jak nie ma, wysyłamy bład BAD_REQUEST);
+ *  - jeżeli format zasobu jest inny niż PlainText, Json, XMl to zwróc bład METHOD_NOT_ALLOWED;
+ *  - odczytujemy zawartość PAYLOADu (jeśli długość zerowa, wysyłamy bład BAD_REQUEST);
+ *  - wyślij żądanie zmiany stanu zasobu do obiektu IoT;
+*/
 void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
   uint8_t optionNumber = parser.getFirstOption(message);
   if (firstOption != URI_PATH) {
@@ -252,18 +248,24 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
           return;
         }
         optionNumber = parser.getNextOption(message);
-      }
-    }
-  }
-  //sparsowaliśmy uri 
+      } // end of while loop
+    } 
+  } // end of if (firstOption != URI_PATH)
+  
+  //sparsowaliśmy uri - szukamy zasobu na serwerze
   for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
     if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0) {
-      if((resources[resourceNumber].flags & 0x02) == 2)
-      {
+      // sprawdzamy, czy na danym zasobie można zmienić stan
+      if ((resources[resourceNumber].flags & 0x02) == 2) {
+        // szukamy wolnej sesji
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-          if(sessions[sessionNumber].contentFormat > 127) {
+          if (sessions[sessionNumber].contentFormat > 127) {
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
+            sessions[sessionNumber].token = parse.parseToken(message, parse.parseTokenLen(message));
+            sessions[sessionNumber].id = ((resources[resourceNumber].flags & 0x0c) >> 2 ); 
+
+            // szukamy opcji ContentFormat
             optionNumber = parser.getNextOption(message);
             while (optionNumber != CONTENT-FORMAT)  {
               //nie ma content-format! BLAD
@@ -272,21 +274,47 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
                 return;
               }
               optionNumber = parser.getNextOption(message);
-            }// jak wyszlismy z petli to znaczy ze znalezlismy conntent format
-            if(strlen(parser.fieldValue) > 0) {
+            }
+            
+            // sprawdzamy zawartość opcji ContentFormat 
+            if (strlen(parser.fieldValue) > 0) {
               if (parser.fieldValue[0] == PLAIN_TEXT) {
-                sendMessageToThing((resources[resourceNumber].flags & 0x06) >>2,
-                                    parser.parsePayload(message)); 
+                sessions[sessionNumber].contentFormat = "t";
+              }
+              else if (parser.fieldValue[0] == XML) {
+                sessions[sessionNumber].contentFormat = "x";
+              }
+              else if (parser.fieldValue[0] == JSON) {
+                sessions[sessionNumber].contentFormat = "j";
+              }
+              else {
+                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED);
+                return;
               }
             } else {
               sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+              return;
             }
-          }
-        }
 
-      }
-    }
-  }
+            // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
+            sendMessageToThing(DETAIL_POST, sessions[sessionNumber].id, parser.parsePayload(message));
+            return;
+          } // end of (sessions[sessionNumber].contentFormat > 127)
+
+          // brak wolnej sesji - bład INTERNAL_SERVER_ERROR
+          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR);
+          return;  
+        } // end of for loop (przeszukiwanie sesji)
+      } // end of if((resources[resourceNumber].flags & 0x02) == 2
+      
+      // jeżeli otrzymaliśmy wiadomośc POST dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
+      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED); 
+      
+    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
+  } // end of for loop (przeszukiwanie zasobów)
+  
+  // błędne uri - brak takiego zasobu na serwerze
+  sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND); 
 }
 
 
@@ -296,12 +324,37 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
 void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint8_t errorType) {
   
 }
+// END:CoAP_Methodes-----------------------------
 
+// START:Thing_Methodes
+/* 
+ *  Protokół radiowy:
+ *  7 | 6 | 5 | 4 | 3 2 |    1    |   0   |
+ *  - | - | - | - | type| sensorID| value |
+ *  
+ *  type:     0-Response; 1-Get; 2-Post 
+ *  sensorID: 0-Lamp; 1-Button
+ *  value:    Lamp: 0-OFF 1-ON  Button: 1-change state(clicked)
+ *  
+*/
 
 /* 
+ *  Metoda odpowiedzialna za przetworzenie danych zgodnie z protokołem radiowym:
+ *  - jeżeli dotyczy zasobu lampka, to odczytujemy stan zasobu zgodnie z dokumentacją; 
+ *  - jeżeli dotyczy zasobu przycisk, to zapisujemy czas przyjścia wiadomości;
+*/
+void getMessageFromThing(byte message){ 
+
+}
+
+/*  DO ZWERYFIKOWANIA POPRAWNOŚCI
  *  Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
 */
-void sendMessageToThing(){
-  //na koncu wywołujemy sendEthernetMessage()
+void sendMessageToThing(uint8_t type, uint8_t sensorID, uint8_t value){
+  byte message;
+  message = (message | (type << 2));
+  message = (message | (sensorID << 1));
+  message = (message | value); 
+  sendRF24Message(message);
 }
-// END:CoAP_Methodes-----------------------------
+// END:Thing_Methodes
