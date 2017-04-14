@@ -1,7 +1,10 @@
 /*
   Resource.h
-  Created by Krzysztof Kossowski, 2017.
-
+  Created in 2017 by:
+    Krzysztof Kossowski,
+    Kamil Stasiak;
+    Piotr Kucharski;
+  
   Struktura opisująca każdy z dostępnych na serwerze zasobów.
 */
 struct record
@@ -48,6 +51,8 @@ struct etagOption
 
 uint8_t RESOURCES_COUNT = 5;
 uint8_t MAX_SESSIONS_COUNT = 5;
+uint8_t MAX_ETAG_COUNT = 20;
+uint8_t MAX_OBSERVATORS_COUNT = 5;
 
 uint16_t BAD_REQUEST = 400;
 uint16_t NOT_FOUND = 400;
