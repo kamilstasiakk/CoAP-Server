@@ -20,37 +20,11 @@ class CoapParser
     char fieldValue[FIELD_MAX_LENGHT];
 
 
-typedef struct record Record;
-
-    // TYPE (T) fields:
-    const uint8_t TYPE_CON = 0;
-    const uint8_t TYPE_NON = 1;
-    const uint8_t TYPE_ACK = 2;
-    const uint8_t TYPE_RST = 3;
-
-    // Code fields:
-    //code class - request
-    const uint8_t CLASS_REQ = 0;
-    //code class - success response
-    const uint8_t CLASS_SUC = 2;
-    //code class - client error response
-    const uint8_t CLASS_CERR = 4;
-    //code class - server error response
-    const uint8_t CLASS_SERR = 5;
-    
-    //code details - empty message
-    const uint8_t DETAIL_EMPTY = 0;
-    //code details - get
-    const uint8_t DETAIL_GET = 1;
-    //code details - post
-    const uint8_t DETAIL_POST = 2;
-    //code details - put
-    const uint8_t DETAIL_PUT = 3;
-    //code details - delete
-    const uint8_t DETAIL_DELETE = 4;
+    typedef struct record Record;
 
     CoapParser();
-    int parseVersion(char* message);
+    //zwraca numer wersji
+    uint8_t parseVersion(char* message);
     //zwraca wartość pola type, wartości te opisane są jako stałe TYPE_*
     uint8_t parseType(char* message);
     //zwraca długość tokena, tylko wartosci 0-8 poprawne
@@ -63,21 +37,21 @@ typedef struct record Record;
     uint16_t parseMessageId(char* message);
     // zwraca wskaznik na tablice, w ktorej zapisany jest Token, 
     //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
-    //geOption
+    //getOption
     char* parseToken(char* message, uint8_t tokenLen);
     // zwraca numer pierwszej opcji, jej wartość zapisana jest w polu fieldValue, 
     //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
-    //geOption
+    //getOption
     uint32_t getFirstOption(char* message);
     // zwraca numer kolejnej opcji, jej wartość zapisana jest w polu fieldValue, 
     //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
-    //geOption
+    //getOption
     uint32_t getNextOption(char* message) ;
     //zwraca długość pola danych
     uint8_t getPayloadSize();
     // zwraca wskaznik na tablice, w ktorej zapisany jest payload, 
     //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
-    //geOption
+    //getOption
     char* parsePayload(char* message);
    
   private:
