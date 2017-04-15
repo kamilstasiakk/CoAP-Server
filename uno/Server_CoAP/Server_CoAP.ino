@@ -258,7 +258,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       return;
     } 
     else {
-      while ( optionNumber != URI_PATH )  {
+      while ( optionNumber != URI_PATH ) {
         if ( optionNumber == ETAG ) {
           etagOptionValue = parser.fieldValue;
         }
@@ -283,7 +283,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   // przeglądamy opcję w celu zczytania możliwych do obsługi opcji (narazie tylko ACCEPT)
   optionNumber = parser.getNextOption(message);
   while ( optionNumber == NO_OPTION ) {
-    if ( optionNumber > ACCEPT ){
+    if ( optionNumber > ACCEPT ) {
           acceptOptionValue = parser.fieldValue;
     }
   }
@@ -314,7 +314,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
         for ( uint8_t etagIndex = 0; etagIndex < MAX_OBSERVATORS_COUNT; etagIndex++ ) {
           if ( etags[etagIndex].etag == etagOptionValue ) {
             // sprawdzamy, czy wartość skojarzona z danym etagiem jest nadal aktualna
-            if ( etags[etagIndex].value == resources[resourceNumber]
+            if ( etags[etagIndex].value == resources[resourceNumber].value ) {
+              // wyślij wiadomość z codem 2.03 valid oznaczającą, iż stan obiektu jest aktualny
+              sendEtagResponse(message);
+              return;
+            } else {
+              // wybierz aktualny stan obiektu i sprawdź, czy z danym klientem nie ma powiązanego takiego etaga
+              
+            }
           }
           
         } // koniec przeszukiwania listy etagów
@@ -511,7 +518,7 @@ void sendPostResponse(Session* session) {
   builder.setMessageId(messageId);
   response = builder.build();
 
-  sendEthernetMessage(response, sizeof(response), session.ipAddress, session.portNumber);
+  sendEthernetMessage(response, session.ipAddress, session.portNumber);
 
   // zmieniamy sesję z aktywnej na nieaktywną
   session.details = ((session.details ^ 0x80);
@@ -519,7 +526,34 @@ void sendPostResponse(Session* session) {
 /* 
  *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta.
 */
-void sendResponse() {
+void sendNormalResponse() {
+  
+}
+/* 
+ *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta z samym etagiem.
+ *  
+ *  TO_DO: zrobić jakąś strukturę dotyczącą wiadomości CON i ACK (czy serwer ma wysyłac tylko obserwacje z CON czy wszystkie z Etagiem jako CON)
+*/
+void sendEtagResponse(char* message) {
+  char response;
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_CON);
+
+  // kod wiadomości 2.03 valid
+  builder.setCodeClass(CLASS_SUC);
+  builder.setCodeDetail(3);
+  
+  builder.setToken(parser.parser.parseToken(message));
+  messageId += 1;
+  builder.setMessageId(messageId);
+  response = builder.build();
+
+  sendEthernetMessage(response, session.ipAddress, session.portNumber);
+}
+/* 
+ *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta z ładunkiem i etagiem.
+*/
+void sendNormalResponseWithEtag() {
   
 }
 /*  TO_DO: Trzeba by dorobić sprawdzanie, czy nowa wartość równa się tej żądanej w POST.
