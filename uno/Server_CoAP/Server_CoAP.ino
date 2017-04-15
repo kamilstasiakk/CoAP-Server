@@ -236,9 +236,101 @@ void getCoapClienMessage(char* message){
   sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);    
 }
 
-
+/* 
+ *  Metoda odpowiedzialna za analizę wiadomości typu GET:
+ *  Możliwe opcje: OBSERV, URI-PATH, ACCEPT, ETAG;
+ *  
+ *  - opcja URI-PATH jest obowiązkowa w kazdym żądaniu GET;
+ *  - reszta opcji jest opcjonalna;
+ *  
+*/
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
+  char etagOptionValue[8] = 0;
+  char observeOptionValue[3] = 2; // klient może wysłac jedynie 0 lub 1
+  char uriPath[255] = 0;
+  char acceptOptionValue[2] = 0;  
   
+  uint8_t optionNumber = parser.getFirstOption(message);
+  if ( firstOption != URI_PATH ) {
+    if ( firstOption > URI_PATH ) {
+      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+      return;
+    } 
+    else {
+      while ( optionNumber != URI_PATH )  {
+        if ( optionNumber == ETAG ) {
+          etagOptionValue = parser.fieldValue;
+        }
+        
+        if ( optionNumber == OBSERVE ) {
+          observeOptionValue = parser.fieldValue;
+        }
+        
+        //nie ma uri! BLAD
+        if ( optionNumber > URI_PATH || optionNumber == NO_OPTION ){
+          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+          return;
+        }
+        optionNumber = parser.getNextOption(message);
+      } // end of while loop
+    } 
+  } // end of if (firstOption != URI_PATH)
+  
+  // mamy tutaj URI_PATH
+  uriPath = parser.fieldValue;
+
+  // przeglądamy opcję w celu zczytania możliwych do obsługi opcji (narazie tylko ACCEPT)
+  optionNumber = parser.getNextOption(message);
+  while ( optionNumber == NO_OPTION ) {
+    if ( optionNumber > ACCEPT ){
+          acceptOptionValue = parser.fieldValue;
+    }
+  }
+
+  //sparsowaliśmy uri - szukamy zasobu na serwerze
+  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
+    if (strcmp(resources[resourceNumber].uri, uriPath) == 0) {
+      // znaleźliśmy zasób na serwerze
+
+      // analiza wartości OBSERVE
+      if ( observeOptionValue != 2 ) {
+        if ( observeOptionValue == "0") {
+          // jeżeli dany klient nie znajduje się na liście obserwatorów to go dodajemy;
+         
+        } else if (observeOptionValue == "1") {
+          // jeżeli dany klienta znajduje sie na liscie obserwatorów to usuwamy go;
+        }
+        else {
+          // zwróc błąd, zła wartośc pola observ
+          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+          return;
+        }
+      } // koniec analizy wartości observe
+
+      // analiza wartości parametru ETAG
+      if (  etagOptionValue != 0 ) {
+        // przeszukaj listę etagów w poszukiwaniu zasobu
+        for ( uint8_t etagIndex = 0; etagIndex < MAX_OBSERVATORS_COUNT; etagIndex++ ) {
+          if ( etags[etagIndex].etag == etagOptionValue ) {
+            // sprawdzamy, czy wartość skojarzona z danym etagiem jest nadal aktualna
+            if ( etags[etagIndex].value == resources[resourceNumber]
+          }
+          
+        } // koniec przeszukiwania listy etagów
+
+        // jeżeli mamy opcję etag, a nie mamy takiego etaga na serwerze to zwróćmy błąd
+        sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+        return;
+      } // koniec analizy wartości parametru etag
+
+
+      // analiza opcji ACCEPT
+      
+    }
+  } // pętla for (przeszukiwanie zasobu)
+  
+  // błędne uri - brak takiego zasobu na serwerze
+  sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND); 
 }
 
 void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
@@ -400,7 +492,10 @@ void sendPostResponse(Session* session) {
   builder.setMessageId(messageId);
   response = builder.build();
 
-  sendEthernetMessage(response, sizeof(response), session.ipAddress, session.portNumber)
+  sendEthernetMessage(response, sizeof(response), session.ipAddress, session.portNumber);
+
+  // zmieniamy sesję z aktywnej na nieaktywną
+  session.details = ((session.details ^ 0x80);
 }
 /* 
  *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta.
@@ -413,18 +508,11 @@ void sendResponse() {
  *  - sprawdzamy typ sesji;
  *  - jeżeli POST (1) to:
  *    - wyślij wiadomośc powrotną z kodem 2.04 (success.changed) oraz z tym samym tokenem;
- *    
- *  - jeżeli GET (0) to: ...
 */
 void analyseSession(Session* session) {
   if ( ((session.detail & 0x60) >> 5) == 1 ) {
     // POST
     sendPostResponse(session);    
-  }
-  else if ( ((session.detail & 0x60) >> 5) == 0 ) {
-    // GET
-
-    
   }
 }
 // END:CoAP_Methodes-----------------------------

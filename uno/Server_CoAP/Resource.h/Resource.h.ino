@@ -50,7 +50,7 @@ struct session
    *  STAN  | TYP | CONTENT_TYPE  |   
    *  
    *  STAN          - 0.active / 1.nonactive   
-   *  TYP           - 0.get / 1.post    
+   *  TYP           - 1.post    
    *  CONTENT_TYPE  - 50.json / 41.xml / 0.text
   */
   byte details = 0;
@@ -81,6 +81,7 @@ uint16_t ETAG = 4;
 uint16_t URI_PATH = 11;
 uint16_t CONTENT-FORMAT = 12;
 uint16_t ACCEPT = 17;
+uint16_t OBSERVE = 6;
 uint16_t NO_OPTION = 0;
 
 uint8_t PLAIN_TEXT = 0;
