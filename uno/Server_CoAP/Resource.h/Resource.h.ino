@@ -13,11 +13,16 @@ struct record
    char[] rt;
    char[] if;
    uint16_t value;
+      
+   /*  
+   *  7 6 5 | 4 3 2 |   1  |    0
+   *        |   ID  | POST | OBSERVE   
+   *  
+   *  ID      - 0-7 
+   *  POST    - 0.cannot / 1.can    
+   *  OBSERVE - 0.cannot / 1.can
+  */
    uint8_t flags;
-
-   // zmienna details może zawierać:
-   // 7 6 5 4 | 3 2 |   1  |    0
-   //         |  id | post | observe
 } Resource;
 
 
@@ -34,12 +39,21 @@ struct session
 {
   IPAddress ipAddress;
   uint16_t portNumber;
-  char token[8];
-  uint8_t id;
+
   
-  //MSB - 0.active / 1.nonactive
-  //j - json, x- xml, t -text
-  char contentFormat = 188;
+  char token[8];
+  char messageID[2];  // do weryfikowania, czy nasza odpowiedź została potwierdzona
+  uint8_t sensorID;
+  
+  /*  
+   *  7     |6 5  |   4 3 2 1 0   |
+   *  STAN  | TYP | CONTENT_TYPE  |   
+   *  
+   *  STAN          - 0.active / 1.nonactive   
+   *  TYP           - 0.get / 1.post    
+   *  CONTENT_TYPE  - 50.json / 41.xml / 0.text
+  */
+  byte details = 0;
 } Session;
 
 
@@ -99,5 +113,7 @@ const uint8_t DETAIL_POST = 2;
 const uint8_t DETAIL_PUT = 3;
 //code details - delete
 const uint8_t DETAIL_DELETE = 4;
+
+const uint8_t DEFAULT_SERVER_VERSION = 1;
 
 

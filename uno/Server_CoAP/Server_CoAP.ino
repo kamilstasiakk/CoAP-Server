@@ -30,6 +30,11 @@ const uint16_t THIS_NODE_ID = 1;
 const uint16_t REMOTE_NODE_ID = 0;
 const uint8_t RF_CHANNEL = 60;
 
+// variables connected with our protocol between Uno and Mini Pro
+const uint8_t RESPONSE_TYPE = 0;
+const uint8_t GET_TYPE = 1;
+const uint8_t POST_TYPE = 2; 
+
 // variable connected with wireless object
 RF24 radio(7,8);  // pin CE=7, CSN=8
 RF24Network network(radio);
@@ -52,7 +57,7 @@ uint32_t observCounter = 0; //globalny licznik związany z opcją observe
 
 Parser parser = Parser();
 Builder builder = Builder();
-uint16_t messageId;
+uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
 void setup() {
   SPI.begin();
@@ -106,6 +111,11 @@ void initializeResourceList() {
   resources[4].if = "value";
   resources[4].value = 0;
   resources[4].flags = B00000000;
+
+  // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
+  // TO_DO: trzeba tutaj dorobić pętlę, jeżeli zaczyna sie od /sensor/ to wyslij geta
+  sendMessageToThing(GET_TYPE, ( (resources[0].flags & 0x1c) >> 2), 0);
+  sendMessageToThing(GET_TYPE, ( (resources[1].flags & 0x1c) >> 2), 0);
 }
 
 // End:Resources--------------------------------
@@ -129,7 +139,6 @@ void receiveRF24Message() {
     RF24NetworkHeader header;
     byte rf24Message;
     network.read(header, rf24Message, sizeof(rf24Message));
-
     getMessageFromThing(byte rf24Message);
   }
 }
@@ -190,26 +199,41 @@ void sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16
  *  Metoda odpowiedzialna za analizę wiadomości CoAP od klienta:
  *  - jeżeli wersja wiadomości jest różna od 01, wyślij błąd BAD_REQUEST;
  *  - jeżeli wersja wiadomości jest zgodna, uruchom odpowiednią metodę zależnie od pola CODE detail;
- *  - obsługiwane są tylko wiadomości CODE = EMPTY, GET lub POST;
+ *  - obsługiwane są tylko wiadomości CODE = EMPTY, GET lub POST (inaczej wyślij błąd BAD_REQUEST);
+ *  - EMPTY: taki kod może miec tylko wiadomośc typu ACK lub RST (inaczej wyślij bład BAD_REQUEST);
+ *  - GET, POST: taki kod może miec tylko wiadomość typu CON lub NON (inaczej wyślij błąd BAD_REQUEST);
 */
-void getCoapClienMessage(char* message){ 
-      if (parser.parseVersion(message) !=1 || parser.parseCodeClass(message) != CLASS_REQ) {
-        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
+void getCoapClienMessage(char* message){
+  if (parser.parseVersion(message) !=1 || parser.parseCodeClass(message) != CLASS_REQ) {
+    sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
+    return;
+  }
+  switch (parser.parseCodeDetail(message)) {
+    case DETAIL_EMPTY:
+      if ( (parser.parseType(message) == TYPE_ACK) || (parser.parseType(message) == TYPE_RST) )
+        receiveEmptyRequest(message);
         return;
-      }
-      switch (parser.parseCodeDetail(message)) {
-        case DETAIL_EMPTY:
-          receiveEmptyRequest(message);
-          break;
-        case DETAIL_GET:
-          receiveGetRequest(message);
-          break;
-        case DETAIL_POST:
-          receivePostRequest(message);
-          break;
-        default:
-          sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
-          break;
+      else  
+        break;
+    case DETAIL_GET:
+      if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) )
+        receiveGetRequest(message);
+        return;
+      else
+        break;
+    case DETAIL_POST:
+      if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) )
+        receivePostRequest(message);
+        return;
+      else 
+        break;
+    default:
+      sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
+      return;
+  }
+
+  // jeżeli wyszliśmy to znaczy, że był po drodze bład;
+  sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);    
 }
 
 
@@ -232,7 +256,10 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
  *  - odczytujemy format zasobu (jak nie ma, wysyłamy bład BAD_REQUEST);
  *  - jeżeli format zasobu jest inny niż PlainText, Json, XMl to zwróc bład METHOD_NOT_ALLOWED;
  *  - odczytujemy zawartość PAYLOADu (jeśli długość zerowa, wysyłamy bład BAD_REQUEST);
+ *  - sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy;
  *  - wyślij żądanie zmiany stanu zasobu do obiektu IoT;
+ *  
+ *  -TO_DO: obsługa XML i JSONa
 */
 void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
   uint8_t optionNumber = parser.getFirstOption(message);
@@ -259,7 +286,7 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
       if ((resources[resourceNumber].flags & 0x02) == 2) {
         // szukamy wolnej sesji
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-          if (sessions[sessionNumber].contentFormat > 127) {
+          if ((sessions[sessionNumber].details & 0x80) == 128) {
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
             sessions[sessionNumber].token = parse.parseToken(message, parse.parseTokenLen(message));
@@ -276,16 +303,18 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
               optionNumber = parser.getNextOption(message);
             }
             
-            // sprawdzamy zawartość opcji ContentFormat 
+            // sprawdzamy zawartość opcji ContentFormat
+            // zerowanie bitów content_type
+            sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xe0);
             if (strlen(parser.fieldValue) > 0) {
               if (parser.fieldValue[0] == PLAIN_TEXT) {
-                sessions[sessionNumber].contentFormat = "t";
+                sessions[sessionNumber].details = (sessions[sessionNumber].details);
               }
               else if (parser.fieldValue[0] == XML) {
-                sessions[sessionNumber].contentFormat = "x";
+                sessions[sessionNumber].details = (sessions[sessionNumber].details | 41);
               }
               else if (parser.fieldValue[0] == JSON) {
-                sessions[sessionNumber].contentFormat = "j";
+                sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
               }
               else {
                 sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED);
@@ -296,8 +325,13 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
               return;
             }
 
+            // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
+            if ( parser.parseType(message) == TYPE_CON ){
+              sendAckResponse(sessions[sessionNumber], message);
+            }
+            
             // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-            sendMessageToThing(DETAIL_POST, sessions[sessionNumber].id, parser.parsePayload(message));
+            sendMessageToThing(POST_TYPE, sessions[sessionNumber].id, parser.parsePayload(message));
             return;
           } // end of (sessions[sessionNumber].contentFormat > 127)
 
@@ -318,19 +352,88 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
 }
 
 
-/* 
+/*  sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16_t port)
  *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej kod błedu.
+ *  
 */
 void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint8_t errorType) {
   
+}
+/* 
+ *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania.
+ *  - pusta odpowiedź zawiera jedynie nagłówek 4bajtowy;
+ *  - TYPE = TYPE_ACK;
+ *  - TLK = 0 -> brak tokena
+ *  - CODE = 0.00 (CLASS_REQ + DETAIL_EMPTY)
+ *  - MessageID = MessageID z wiadomości;
+*/
+void sendEmptyAckResponse(Session* session, char* message) {
+  byte response[4];
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_ACK);
+  builder.setCodeClass(CLASS_REQ);
+  builder.setCodeDetail(DETAIL_EMPTY);
+  builder.setMessageId(parser.parseMessageId(message));
+  response = builder.buildAckHeader();
+  sendEthernetMessage(response, sizeof(response), session.ipAddress, session.portNumber)
+}
+/* 
+ * Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania wraz z ładunkiem.
+*/
+void sendPiggybackAckResponse(IPAddress ip, uint16_t portNumber, char* message, uint8_t errorType) {
+  
+}
+/* 
+ *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta związanej z żądaniem POST.
+*/
+void sendPostResponse(Session* session) {
+  char response;
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_NON);
+
+  // kod wiadomości 2.04
+  builder.setCodeClass(CLASS_SUC);
+  builder.setCodeDetail(4);
+  
+  builder.setToken(session.token);
+  messageId += 1;
+  builder.setMessageId(messageId);
+  response = builder.build();
+
+  sendEthernetMessage(response, sizeof(response), session.ipAddress, session.portNumber)
+}
+/* 
+ *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta.
+*/
+void sendResponse() {
+  
+}
+/*  TO_DO: Trzeba by dorobić sprawdzanie, czy nowa wartość równa się tej żądanej w POST.
+ *  Metoda odpowiedzialna za analizę twającej sesji.
+ *  - sprawdzamy typ sesji;
+ *  - jeżeli POST (1) to:
+ *    - wyślij wiadomośc powrotną z kodem 2.04 (success.changed) oraz z tym samym tokenem;
+ *    
+ *  - jeżeli GET (0) to: ...
+*/
+void analyseSession(Session* session) {
+  if ( ((session.detail & 0x60) >> 5) == 1 ) {
+    // POST
+    sendPostResponse(session);    
+  }
+  else if ( ((session.detail & 0x60) >> 5) == 0 ) {
+    // GET
+
+    
+  }
 }
 // END:CoAP_Methodes-----------------------------
 
 // START:Thing_Methodes
 /* 
  *  Protokół radiowy:
- *  7 | 6 | 5 | 4 | 3 2 |    1    |   0   |
- *  - | - | - | - | type| sensorID| value |
+ *  | 7  6 | 5  4  3  | 2 1 0 |
+ *  | type | sensorID | value |
  *  
  *  type:     0-Response; 1-Get; 2-Post 
  *  sensorID: 0-Lamp; 1-Button
@@ -340,21 +443,42 @@ void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint8_t
 
 /* 
  *  Metoda odpowiedzialna za przetworzenie danych zgodnie z protokołem radiowym:
- *  - jeżeli dotyczy zasobu lampka, to odczytujemy stan zasobu zgodnie z dokumentacją; 
- *  - jeżeli dotyczy zasobu przycisk, to zapisujemy czas przyjścia wiadomości;
+ *  - jeżeli typ wiadomości jest inny niż RESPONSE to porzucam wiadomość;
+ *  - odnajdujemy sensorID w liście zasobów serwera (jeżeli brak, to odrzucamy)
+ *  - aktualizujemy zawartość value w zasobie zgodnie z wartością znajdującą się w wiadomości
+ *  
+ *  - jeżeli jest jakaś sesja związana z danym sensorID to przekaż ją do analizy;
 */
 void getMessageFromThing(byte message){ 
+  if ( ((message & 0xc0) >> 6) == RESPONSE_TYPE ) {
+    for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
+      // odnajdujemy sensorID w liście zasobów serwera
+      if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
+        // aktualizujemy zawartość value w zasobie
+        resources[resourceNumber].value = (message & 0x07);
 
+
+        // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
+        // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
+        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+          if ( ((sessions[sessionNumber].details & 0x80) == 128) 
+                  && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
+            analyseSession(sessions[sessionNumber]);
+          }
+      }
+    } 
+    // jeżeli nie odnaleźliśy zasobu to porzucamy wiadomość
+  }
+  // porzuć wiadomość innną niż response
 }
-
 /*  DO ZWERYFIKOWANIA POPRAWNOŚCI
  *  Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
 */
 void sendMessageToThing(uint8_t type, uint8_t sensorID, uint8_t value){
   byte message;
-  message = (message | (type << 2));
-  message = (message | (sensorID << 1));
-  message = (message | value); 
+  message = ( message | ((type & 0x03) << 6) );
+  message = ( message | ((sensorID & 0x07) << 3) );
+  message = ( message | (value & 0x07) ); 
   sendRF24Message(message);
 }
 // END:Thing_Methodes

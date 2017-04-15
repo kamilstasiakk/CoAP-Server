@@ -154,3 +154,10 @@ char* CoapBuilder::build()
   return message;
 }
 
+// czy to zadziałą?
+char* CoapBuilder::buildAckHeader()
+{
+  setTokenLen(0);
+  return ( message >> ((MAX_MESSAGE_LENGHT-1) * 8) )
+}
+

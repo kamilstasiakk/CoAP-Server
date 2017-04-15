@@ -34,6 +34,7 @@ class CoapBuilder
     //sets Payload
     void setPayload(char* value);
     char* build(); 
+    char* buildAckHeader();
 
   private:
     const int MAX_MESSAGE_LENGHT = 200;
