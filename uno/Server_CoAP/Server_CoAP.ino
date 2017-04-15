@@ -204,7 +204,6 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port){
  *  - EMPTY: taki kod może miec tylko wiadomośc typu ACK lub RST (inaczej wyślij bład BAD_REQUEST);
  *  - GET, POST: taki kod może miec tylko wiadomość typu CON lub NON (inaczej wyślij błąd BAD_REQUEST);
 */
-<<<<<<< HEAD
 void getCoapClienMessage(char* message){
   if (parser.parseVersion(message) !=1 || parser.parseCodeClass(message) != CLASS_REQ) {
     sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
@@ -233,32 +232,6 @@ void getCoapClienMessage(char* message){
       sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
       return;
   }
-=======
-void getCoapClienMessage(char* message){ 
-      if (parser.parseVersion(message) !=1) {
-        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "Bad version");
-        return;
-      }
-      if (parser.parseCodeClass(message) != CLASS_REQ) {
-        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "bad class code - only requests allowed");
-        return;
-      }
-      switch (parser.parseCodeDetail(message)) {
-        case DETAIL_EMPTY:
-          receiveEmptyRequest(message);
-          break;
-        case DETAIL_GET:
-          receiveGetRequest(message);
-          break;
-        case DETAIL_POST:
-          receivePostRequest(message);
-          break;
-        default:
-          sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "bad class detail" );
-          break;
-      }
-}
->>>>>>> origin/master
 
   // jeżeli wyszliśmy to znaczy, że był po drodze bład;
   sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);    
@@ -406,11 +379,8 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
       if ((resources[resourceNumber].flags & 0x02) == 2) {
         // szukamy wolnej sesji
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-<<<<<<< HEAD
           if ((sessions[sessionNumber].details & 0x80) == 128) {
-=======
-          if (sessions[sessionNumber].contentFormat > 127) {//wolna
->>>>>>> origin/master
+            // sesja wolna
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
             sessions[sessionNumber].token = parser.parseToken(message, parser.parseTokenLen(message));
@@ -478,13 +448,9 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
 /*  sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16_t port)
  *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej kod błedu.
-<<<<<<< HEAD
-=======
  *  -jesli żądanie typu CON - odpowiedz typu ACK
  *  -jesli żądanie typu NON - odpowiedz typu NON
  *  -jesli w żadaniu jest token to go przepisujemy
->>>>>>> origin/master
- *  
 */
 void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_t errorType, char * errorMessage) {
   builder.init();
@@ -520,7 +486,7 @@ void sendEmptyAckResponse(Session* session, char* message) {
   builder.setCodeDetail(DETAIL_EMPTY);
   builder.setMessageId(parser.parseMessageId(message));
   response = builder.buildAckHeader();
-  sendEthernetMessage(response, sizeof(response), session.ipAddress, session.portNumber)
+  sendEthernetMessage(response, session.ipAddress, session.portNumber)
 }
 /* 
  * Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania wraz z ładunkiem.
