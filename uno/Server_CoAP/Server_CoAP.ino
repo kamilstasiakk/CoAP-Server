@@ -55,7 +55,7 @@ Etag etags[MAX_ETAG_COUNT];
 Observator observators[MAX_OBSERVATORS_COUNT];
 uint32_t observCounter = 0; //globalny licznik związany z opcją observe
 
-Parser parser = Parser();
+CoapParser parser = CoapParser();
 Builder builder = Builder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
@@ -181,7 +181,8 @@ void receiveEthernetMessage() {
  *  - ip jest adresem ip hosta, do którego adresujemy wiadomość np:IPAddress adres(10,10,10,1)
  *  - port jest numerem portu hosta, do którego adresuemy wiadomość
 */
-void sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16_t port){
+void sendEthernetMessage(char* message, IPAddress ip, uint16_t port){
+  size_t messageSize = strlen(char* message);
   Udp.beginPacket(ip), port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
@@ -203,6 +204,7 @@ void sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16
  *  - EMPTY: taki kod może miec tylko wiadomośc typu ACK lub RST (inaczej wyślij bład BAD_REQUEST);
  *  - GET, POST: taki kod może miec tylko wiadomość typu CON lub NON (inaczej wyślij błąd BAD_REQUEST);
 */
+<<<<<<< HEAD
 void getCoapClienMessage(char* message){
   if (parser.parseVersion(message) !=1 || parser.parseCodeClass(message) != CLASS_REQ) {
     sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
@@ -231,6 +233,32 @@ void getCoapClienMessage(char* message){
       sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);
       return;
   }
+=======
+void getCoapClienMessage(char* message){ 
+      if (parser.parseVersion(message) !=1) {
+        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "Bad version");
+        return;
+      }
+      if (parser.parseCodeClass(message) != CLASS_REQ) {
+        sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "bad class code - only requests allowed");
+        return;
+      }
+      switch (parser.parseCodeDetail(message)) {
+        case DETAIL_EMPTY:
+          receiveEmptyRequest(message);
+          break;
+        case DETAIL_GET:
+          receiveGetRequest(message);
+          break;
+        case DETAIL_POST:
+          receivePostRequest(message);
+          break;
+        default:
+          sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "bad class detail" );
+          break;
+      }
+}
+>>>>>>> origin/master
 
   // jeżeli wyszliśmy to znaczy, że był po drodze bład;
   sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST);    
@@ -355,15 +383,15 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
 */
 void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
   uint8_t optionNumber = parser.getFirstOption(message);
-  if (firstOption != URI_PATH) {
-    if (firstOption > URI_PATH) {
-      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+  if (optionNumber != URI_PATH) {
+    if (optionNumber > URI_PATH) {
+      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO URI");
       return;
     } else {
       while (optionNumber != URI_PATH)  {
         //nie ma uri! BLAD
         if (optionNumber > URI_PATH || optionNumber == NO_OPTION){
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO URI");
           return;
         }
         optionNumber = parser.getNextOption(message);
@@ -378,10 +406,14 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
       if ((resources[resourceNumber].flags & 0x02) == 2) {
         // szukamy wolnej sesji
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+<<<<<<< HEAD
           if ((sessions[sessionNumber].details & 0x80) == 128) {
+=======
+          if (sessions[sessionNumber].contentFormat > 127) {//wolna
+>>>>>>> origin/master
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
-            sessions[sessionNumber].token = parse.parseToken(message, parse.parseTokenLen(message));
+            sessions[sessionNumber].token = parser.parseToken(message, parser.parseTokenLen(message));
             sessions[sessionNumber].id = ((resources[resourceNumber].flags & 0x0c) >> 2 ); 
 
             // szukamy opcji ContentFormat
@@ -389,7 +421,7 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
             while (optionNumber != CONTENT-FORMAT)  {
               //nie ma content-format! BLAD
               if (optionNumber > CONTENT-FORMAT || optionNumber == NO_OPTION){
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
                 return;
               }
               optionNumber = parser.getNextOption(message);
@@ -409,11 +441,11 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
                 sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
               }
               else {
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED);
+                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
                 return;
               }
             } else {
-              sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST);
+              sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
               return;
             }
 
@@ -428,28 +460,49 @@ void receivePostRequest(char* message, IPAddress ip, uint16_t portNumber) {
           } // end of (sessions[sessionNumber].contentFormat > 127)
 
           // brak wolnej sesji - bład INTERNAL_SERVER_ERROR
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR);
+          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "Too much requests");
           return;  
         } // end of for loop (przeszukiwanie sesji)
       } // end of if((resources[resourceNumber].flags & 0x02) == 2
       
       // jeżeli otrzymaliśmy wiadomośc POST dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
-      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED); 
+      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED, "Operation not permitted"); 
       
     } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
   } // end of for loop (przeszukiwanie zasobów)
   
   // błędne uri - brak takiego zasobu na serwerze
-  sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND); 
+  sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "No a such resource"); 
 }
 
 
 /*  sendEthernetMessage(char* message, size_t messageSize, IPAddress ip, uint16_t port)
  *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej kod błedu.
+<<<<<<< HEAD
+=======
+ *  -jesli żądanie typu CON - odpowiedz typu ACK
+ *  -jesli żądanie typu NON - odpowiedz typu NON
+ *  -jesli w żadaniu jest token to go przepisujemy
+>>>>>>> origin/master
  *  
 */
-void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint8_t errorType) {
-  
+void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_t errorType, char * errorMessage) {
+  builder.init();
+  if (parser.parseType(message) == TYPE_CON) 
+    builder.setType(TYPE_ACK);
+  else
+    builder.setType(TYPE_NON);
+  if (parser.parseTokenLen(message) > 0) 
+    builder.setToken(parser.parseToken(message, parser.parseTokenLen(message));
+  if (errorType < 500) //server error
+    builder.setCodeClass(CLASS_SERR);
+  else
+    builder.setCodeClass(CLASS_CERR);
+  builder.setCodeDetail(errorType)
+  builder.setMessageId(messageId++);
+  builder.setPayload(errorMessage);
+  sendEthernetMessage(builder.build(), ip, portNumber);
+   
 }
 /* 
  *  Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania.

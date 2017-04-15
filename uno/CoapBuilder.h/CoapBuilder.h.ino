@@ -15,7 +15,12 @@ class CoapBuilder
     char message[MAX_MESSAGE_LENGHT];
     
     CoapBuilder();
-    //set fields as default
+    /*set fields as default
+     * version = 1
+     * type = non
+     * token length = 0
+     * msg id = 0
+    */
     void init();
     //sets version field value
     void setVersion(uint8_t value);
