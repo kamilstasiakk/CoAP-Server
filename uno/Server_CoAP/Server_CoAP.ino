@@ -22,7 +22,8 @@
 #include <EthernetUdp.h>
 
 // include our librares;
-#include <CoapParser_h>
+#include "test.h"
+#include <CoapParser.h>
 #include <Resource.h>
 
 // constant variables neccessary for RF24 wireless connection;
@@ -424,177 +425,177 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
               if ( resources[resourceNumber].observators[observatorIndex].ipAddress == ip ) {
                 if ( resources[resourceNumber].observators[observatorIndex].portNumber == portNumber ) {
                   if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) == 0) {
-                    /* znaleziono klienta na liście obserwatorów */
-                    break;
-                  }
-                } 
-              } 
+                  /* znaleziono klienta na liście obserwatorów */
+                  break;
+                }
+              }
             }
           }
         }
-      
-        /* jeżeli obserwator znalazł się, to na pewno jego index jest mniejszy niż maksymalna pojemność listy */
-        if ( observatorIndex < MAX_OBSERVATORS_COUNT) {
+      }
+
+      /* jeżeli obserwator znalazł się, to na pewno jego index jest mniejszy niż maksymalna pojemność listy */
+      if ( observatorIndex < MAX_OBSERVATORS_COUNT) {
           /* klient jest zapisany na liscie obserwatorów  - analizujemy wartośc opcji etag */
 
           /* znajdź wartość etaga w liscie etagów przypisanych do danego obserwatora */
           for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-              if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.etagId = etagOptionValue ) {
-                /* znaleziono etag pasujący do żądanego */
+            if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.etagId = etagOptionValue ) {
+              /* znaleziono etag pasujący do żądanego */
 
-                /* sprawdz, czy dana wartość jest nadal aktualna */
-                if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.savedValue == resources[resourceNumber].textValue ) {
-                  /* wartość związana z etagiem jest nadal aktualna */
-                  /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */ 
-                  for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-                    if ((sessions[sessionNumber].details & 0x80) == 128) {
-                      /* sesja wolna */
-                      sessions[sessionNumber].ipAddress = ip;
-                      sessions[sessionNumber].portNumber = portNumber;
-                      sessions[sessionNumber].messageID = ++messageId;
-                      sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
-                      sessions[sessionNumber].etagValue = etagOptionValue;
-                      sessions[sessionNumber].details = 0;  // active, put, text
+              /* sprawdz, czy dana wartość jest nadal aktualna */
+              if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.savedValue == resources[resourceNumber].textValue ) {
+                /* wartość związana z etagiem jest nadal aktualna */
+                /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
+                for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+                  if ((sessions[sessionNumber].details & 0x80) == 128) {
+                    /* sesja wolna */
+                    sessions[sessionNumber].ipAddress = ip;
+                    sessions[sessionNumber].portNumber = portNumber;
+                    sessions[sessionNumber].messageID = ++messageId;
+                    sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                    sessions[sessionNumber].etagValue = etagOptionValue;
+                    sessions[sessionNumber].details = 0;  // active, put, text
 
-                      /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                      resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.timestamp = (millis()/1000);
+                    /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
+                    resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.timestamp = (millis() / 1000);
 
-                      /* wysyłamy wiadomość 2.03 Valid z opcją Etag, bez payloadu i kończymy wykonywanie funkcji */
-                      sendValidResponse(sessions[sessionNumber]);
-                      return;
-                    }
+                    /* wysyłamy wiadomość 2.03 Valid z opcją Etag, bez payloadu i kończymy wykonywanie funkcji */
+                    sendValidResponse(sessions[sessionNumber]);
+                    return;
                   }
-
-                  /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                  sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
-                  return;
                 }
-        else {
-          /* wartośc związana z danym etagiem nie jest już aktualna */
-          
-          /* szukamy, czy dany zasób ma już przypisany etag do takiej wartości jaką ma obecnie */
-          for (int globalIndex=0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
-            if ( globalEtags[globalIndex].resource == resources[resourceNumber] ) {
-             if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].textValue ) {
-              /* znaleziono globalny etag skojarzony z danym zasobem i danym stanem zasobu */
 
-              /* przeszukujemy listę etagów, ktore są znane obserwatorowi w celu znalezienia aktualnego etaga */
-              for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-              if(resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagIndex] == globalEtags[globalIndex] ) {
-                /* znaleźliśmy etaga aktualnego w liście etagów znanych klientówi */
-                
-                /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */ 
-                for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-                if ((sessions[sessionNumber].details & 0x80) == 128) {
-                  /* sesja wolna */
-                  sessions[sessionNumber].ipAddress = ip;
-                  sessions[sessionNumber].portNumber = portNumber;
-                  sessions[sessionNumber].messageID = ++messageId;
-                  sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
-                  sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
-                  sessions[sessionNumber].details = 0;  // active, put, text
-
-                  /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                  resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagCounter].timestamp = (millis()/1000);
-              
-                  /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
-                  sendContentResponseWithEtag(sessions[sessionNumber]);
-                  return;
-                }
-                }
-                /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
-                return;
-              }
-              }
-
-              /* nie ma etaga aktualnego na liście etagów znanych klientowi - wysyłamy wiadomość 2.05 Content z aktualnym etagiem jako opcją*/
-              /* sprawdzamy, czy do danego klienta możemy jeszcze dodać nowy etag */
-              if( resources[resourceNumber].observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ) {
-              /* najpierw trzeba znaleźć sesję wolną, bo jak nie będzie sesji to klient nadal nie będzie wiedział o tym etagu */              
-              /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */ 
-                for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-                if ((sessions[sessionNumber].details & 0x80) == 128) {
-                  /* sesja wolna */
-                  
-                  /* mozna dołożyć wskaźnik do tablicy obserwatora */
-                  resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
-                  
-                  sessions[sessionNumber].ipAddress = ip;
-                  sessions[sessionNumber].portNumber = portNumber;
-                  sessions[sessionNumber].messageID = ++messageId;
-                  sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
-                  sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
-                  sessions[sessionNumber].details = 0;  // active, put, text
-
-                  /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                  resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagCounter].timestamp = (millis()/1000);
-              
-                  /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
-                  sendContentResponseWithEtag(sessions[sessionNumber]);
-                  return;
-                }
-                }
                 /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
                 sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
                 return;
               }
               else {
-              /* brak miejsca na nowy etag - zwróc wiadomość 2.05 content bez opcji etag, z opcją observe */
-              sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
-              return;
+                /* wartośc związana z danym etagiem nie jest już aktualna */
+
+                /* szukamy, czy dany zasób ma już przypisany etag do takiej wartości jaką ma obecnie */
+                for (int globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
+                  if ( globalEtags[globalIndex].resource == resources[resourceNumber] ) {
+                    if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].textValue ) {
+                      /* znaleziono globalny etag skojarzony z danym zasobem i danym stanem zasobu */
+
+                      /* przeszukujemy listę etagów, ktore są znane obserwatorowi w celu znalezienia aktualnego etaga */
+                      for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
+                        if (resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagIndex] == globalEtags[globalIndex] ) {
+                          /* znaleźliśmy etaga aktualnego w liście etagów znanych klientówi */
+
+                          /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
+                          for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+                            if ((sessions[sessionNumber].details & 0x80) == 128) {
+                              /* sesja wolna */
+                              sessions[sessionNumber].ipAddress = ip;
+                              sessions[sessionNumber].portNumber = portNumber;
+                              sessions[sessionNumber].messageID = ++messageId;
+                              sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                              sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
+                              sessions[sessionNumber].details = 0;  // active, put, text
+
+                              /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
+                              resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagCounter].timestamp = (millis() / 1000);
+
+                              /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
+                              sendContentResponseWithEtag(sessions[sessionNumber]);
+                              return;
+                            }
+                          }
+                          /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
+                          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                          return;
+                        }
+                      }
+
+                      /* nie ma etaga aktualnego na liście etagów znanych klientowi - wysyłamy wiadomość 2.05 Content z aktualnym etagiem jako opcją*/
+                      /* sprawdzamy, czy do danego klienta możemy jeszcze dodać nowy etag */
+                      if ( resources[resourceNumber].observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ) {
+                        /* najpierw trzeba znaleźć sesję wolną, bo jak nie będzie sesji to klient nadal nie będzie wiedział o tym etagu */
+                        /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
+                        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+                          if ((sessions[sessionNumber].details & 0x80) == 128) {
+                            /* sesja wolna */
+
+                            /* mozna dołożyć wskaźnik do tablicy obserwatora */
+                            resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
+
+                            sessions[sessionNumber].ipAddress = ip;
+                            sessions[sessionNumber].portNumber = portNumber;
+                            sessions[sessionNumber].messageID = ++messageId;
+                            sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                            sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
+                            sessions[sessionNumber].details = 0;  // active, put, text
+
+                            /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
+                            resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagCounter].timestamp = (millis() / 1000);
+
+                            /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
+                            sendContentResponseWithEtag(sessions[sessionNumber]);
+                            return;
+                          }
+                        }
+                        /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
+                        sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                        return;
+                      }
+                      else {
+                        /* brak miejsca na nowy etag - zwróc wiadomość 2.05 content bez opcji etag, z opcją observe */
+                        sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                        return;
+                      }
+                    }
+                  }
+                }
+
+                /* nie ma globalnego etaga związanego z aktualna wartością zasobu */
+                /* sprawdzamy, czy możemy dodać (lub nadpisać) element w liście globalnej etagów */
+                for (int globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
+                  if ( ((globalEtags[globalIndex].timestamp - (millis() / 1000)) >  ETAG_VALID_TIME_IN_SECONDS ) || (globalEtags[globalIndex].details > 127) ) {
+                    /* jest wolne miejsce w tablicy */
+
+                    /* tworzymy nowy wpis w tablicy globlnej etagów */
+                    globalEtags[globalIndex].resource = resources[resourceNumber];
+                    globalEtags[globalIndex].savedValue = resources[resourceNumber].textValue;
+                    globalEtags[globalIndex].etagId = ++globalEtagCounter;
+                    globalEtags[globalIndex].timestamp = (millis() / 1000);
+                    globalEtags[globalIndex].details = 0; //active, text
+
+                    /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
+                    for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+                      if ((sessions[sessionNumber].details & 0x80) == 128) {
+                        /* sesja wolna */
+
+                        /* dodajemy dany wpis do lokalnej tablicy danego obserwatora */
+                        resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
+
+                        sessions[sessionNumber].ipAddress = ip;
+                        sessions[sessionNumber].portNumber = portNumber;
+                        sessions[sessionNumber].messageID = ++messageId;
+                        sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                        sessions[sessionNumber].etagValue = etagOptionValue;
+                        sessions[sessionNumber].details = 0;  // active, put, text
+
+                        /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
+                        resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.timestamp = (millis() / 1000);
+
+                        /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
+                        sendContentResponseWithEtag(sessions[sessionNumber]);
+                        return;
+                      }
+                    }
+
+                    /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
+                    sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                    return;
+                  }
+                }
+                /* brak miejsca na nową wartość etag - wyślij wiadomość 2.05 content z opcją observe, z ładunkiem, bez opcji etag */
+                sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                return;
               }
             }
-            }
-          }
-          
-          /* nie ma globalnego etaga związanego z aktualna wartością zasobu */
-          /* sprawdzamy, czy możemy dodać (lub nadpisać) element w liście globalnej etagów */
-          for (int globalIndex=0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
-            if ( ((globalEtags[globalIndex].timestamp - (millis()/1000)) >  ETAG_VALID_TIME_IN_SECONDS ) || (globalEtags[globalIndex].details > 127) ) {
-              /* jest wolne miejsce w tablicy */
-              
-              /* tworzymy nowy wpis w tablicy globlnej etagów */
-              globalEtags[globalIndex].resource = resources[resourceNumber];
-              globalEtags[globalIndex].savedValue = resources[resourceNumber].textValue;
-              globalEtags[globalIndex].etagId = ++globalEtagCounter;
-              globalEtags[globalIndex].timestamp = (millis()/1000);
-              globalEtags[globalIndex].details = 0; //active, text
-
-              /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */ 
-                for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-                if ((sessions[sessionNumber].details & 0x80) == 128) {
-                  /* sesja wolna */
-                  
-                  /* dodajemy dany wpis do lokalnej tablicy danego obserwatora */
-                  resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];  
-                  
-                  sessions[sessionNumber].ipAddress = ip;
-                  sessions[sessionNumber].portNumber = portNumber;
-                  sessions[sessionNumber].messageID = ++messageId;
-                  sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
-                  sessions[sessionNumber].etagValue = etagOptionValue;
-                  sessions[sessionNumber].details = 0;  // active, put, text
-
-                  /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                  resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.timestamp = (millis()/1000);
-
-                  /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
-                  sendContentResponseWithEtag(sessions[sessionNumber]);
-                  return;
-                }
-                }
-                
-                /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
-                return;         
-            }
-          }
-          /* brak miejsca na nową wartość etag - wyślij wiadomość 2.05 content z opcją observe, z ładunkiem, bez opcji etag */
-          sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
-          return;
-        }
-              }
           }
           /* nie znaleziono wartości etag na liście etagów przpisanych do danego klienta - wyślij odpowiedz z kodem błedu 4.04 NOT_FOUND */
           sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "ETAG NOT FOUND");
@@ -609,36 +610,36 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       }
       /*-----koniec analizy wartości parametrów ETAG----------------------------------------------------------------------------- */
 
-    /* brak opcji Etag */
-   
-    
-    /*-----analiza wiadomości z opcjami accept + observe + URI_PATH----------------------------------------------------------*/
-    if ( observeOptionValue != 2  &&  acceptOptionValue = 0 ) {
-      
-    }
-    /*-----koniec analizy wiadomości z opcjami accept + observe + URI_PATH-------------------------------------------------- */
-    
-    
-    /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
-    if ( observeOptionValue != 2 ) {
-      /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
-      sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
-      return;
-    }
-    /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
-      
-    
-    /*-----analiza wiadomości z opcją accept + URI_PATH----------------------------------------------------------*/
-    if ( acceptOptionValue = 0 ) {
-      
-    }
-    /*-----koniec analizy wiadomości o opcją accept + URI_PATH------------------------------------------------- */
-    
-        
-    /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/  
-    /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
-    sendContentResponse(ip, portNumber, parser.parseToken(message), resources[resourceNumber].textValue, false);  
-    /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
+      /* brak opcji Etag */
+
+
+      /*-----analiza wiadomości z opcjami accept + observe + URI_PATH----------------------------------------------------------*/
+      if ( observeOptionValue != 2  &&  acceptOptionValue = 0 ) {
+
+      }
+      /*-----koniec analizy wiadomości z opcjami accept + observe + URI_PATH-------------------------------------------------- */
+
+
+      /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
+      if ( observeOptionValue != 2 ) {
+        /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
+        sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+        return;
+      }
+      /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
+
+
+      /*-----analiza wiadomości z opcją accept + URI_PATH----------------------------------------------------------*/
+      if ( acceptOptionValue = 0 ) {
+
+      }
+      /*-----koniec analizy wiadomości o opcją accept + URI_PATH------------------------------------------------- */
+
+
+      /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
+      /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
+      sendContentResponse(ip, portNumber, parser.parseToken(message), resources[resourceNumber].textValue, false);
+      /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
     }  //if (strcmp(resources[resourceNumber].uri, uriPath) == 0)
   } //for loop (przeszukiwanie zasobu)
 
@@ -647,9 +648,66 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
 }
 
+/**
+   Metoda odpowiedzialna za obsługe wiadomości ACK i RST
+   Takie wiaodmości mogą być wysłane jedynie w odpowiedzi na wiadomość aktualizacyjną stan zasobu
 
+   - przeszukujemy listę sesji;
+   - jeśeli wiadomość typu ack:
+      - zmieniamy status sesji na wolny;
+
+   - jeżeli wiaodmość typu rst:
+      - szukamy klienta w liscie obserwatorów
+      - zmieniamy stan obserwatora na wolny (usuwamy klienta)
+*/
 void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
+  /* przeszukujemy liste sesji */
+  for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+    if ((sessions[sessionNumber].details & 0x80) != 128) {
+      /* sesja zajęta */
+      if ( sessions[sessionNumber].ipAddress == ip ) {
+        if ( sessions[sessionNumber].port == portNumber ) {
+          /* znaleźliśmy sesję związana z danym klientem */
 
+          if ( parser.parseType(message) == TYPE_ACK ) {
+            /* wiadomość typu ack */
+
+            /* zmień status sesji na wolny */
+            sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+            return;
+          }
+
+          if ( parser.parseType(message) == TYPE_RST ) {
+            /* wiadomośc typu rst */
+
+            /* szukamy obserwatora w sesji*/
+            for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
+              if ( sessions[sessionNumber].resource.observators[observatorIndex].details < 128 ) {
+                /* dany wpis jest oznaczony jako aktywny */
+                if ( sessions[sessionNumber].resource.observators[observatorIndex].ipAddress == ip ) {
+                  if ( sessions[sessionNumber].resource.observators[observatorIndex].port == portNumber ) {
+                    if ( sessions[sessionNumber].resource.observators[observatorIndex].token == sessions[sessionNumber].token ) {
+                      /* znaleźliśmy obserwatora na liście obserwatorów */
+
+                      /* usuwamy klienta z listy obserwatorów */
+                      sessions[sessionNumber].resource.observators[observatorIndex].details = (sessions[sessionNumber].resource.observators[observatorIndex].details | (1 << 7)) 
+
+                      /* zmień status sesji na wolny */
+                      sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/* brak wpisu w tablicy sesji - ignoruj wiadomość */
 }
 /*
     Metoda odpowiedzialna za analizę wiadomości typu PUT:
@@ -798,8 +856,8 @@ void sendEmptyAckResponse(Session * session, char* message) {
   builder.setCodeClass(CLASS_REQ);
   builder.setCodeDetail(DETAIL_EMPTY);
   builder.setMessageId(parser.parseMessageId(message));
-  response = builder.buildAckHeader();
-  sendEthernetMessage(response, session.ipAddress, session.portNumber)
+  response = builder.
+             sendEthernetMessage(response, session.ipAddress, session.portNumber)
 }
 /*
    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania wraz z ładunkiem.
@@ -831,22 +889,22 @@ void sendPutResponse(Session * session) {
 }
 
 
-/*
-    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
-    - wersja protokołu: 1;
-    - typ wiadomości: NON
-    - kod wiadomości: 2.05 content
-    - messageID: dowolna watość (ustawiamy jako 0);
-    - token: podany jako parametr wywołania;
-    - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
-    - ładunek: przekazany jako parametr;
+                  /*
+                      Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
+                      - wersja protokołu: 1;
+                      - typ wiadomości: NON
+                      - kod wiadomości: 2.05 content
+                      - messageID: dowolna watość (ustawiamy jako 0);
+                      - token: podany jako parametr wywołania;
+                      - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
+                      - ładunek: przekazany jako parametr;
 
-    - budujemy wiadomość zwrotną;
-    - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
+                      - budujemy wiadomość zwrotną;
+                      - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
 
-    (wiadomość taka z opcją observe może być stworzona w momencie, gdy serwer nie ma już wolnych zasobó na nowe etagi
-    ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
-*/
+                      (wiadomość taka z opcją observe może być stworzona w momencie, gdy serwer nie ma już wolnych zasobó na nowe etagi
+                      ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
+                  */
 void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, char* payloadValue, bool addObserveOption) {
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
@@ -858,11 +916,11 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
 
   builder.setToken(tokenValue);
   builder.setMessageId(0);
-  
+
   if (addObserveOption) {
     builder.setOption(OBSERVE, ++observeCounter);
   }
-  
+
   builder.setPayload(payloadValue);
 
   /* stwórz wiadomość zwrotną */
@@ -899,7 +957,7 @@ void sendContentResponseWithEtag(Session session) {
 
   builder.setToken(session.token);
   builder.setMessageId(session.messageId);
-  
+
   builder.setOption(ETAG, session.etag);
   builder.setOption(OBSERVE, ++observeCounter);
 
@@ -939,7 +997,7 @@ void sendValidResponse(Session session) {
 
   builder.setToken(session.token);
   builder.setMessageId(session.messageId);
-  
+
   builder.setOption(ETAG, session.etag);
   builder.setOption(OBSERVE, ++observeCounter);
 
@@ -953,7 +1011,7 @@ void sendValidResponse(Session session) {
 
 
 
-/*  TO_DO: Trzeba by dorobić sprawdzanie, czy nowa wartość równa się tej żądanej w PUT.
+/*
     Metoda odpowiedzialna za analizę twającej sesji.
     - sprawdzamy typ sesji;
     - jeżeli PUT (1) to:
@@ -963,6 +1021,12 @@ void analyseSession(Session * session) {
   if ( ((session.detail & 0x60) >> 5) == 1 ) {
     // PUT
     sendPutResponse(session);
+  }
+
+  if ( ((session.detail & 0x60) >> 5) == 1 ) {
+    // conFromServer
+
+    //
   }
 }
 // END:CoAP_Methodes-----------------------------
