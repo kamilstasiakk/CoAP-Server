@@ -7,7 +7,6 @@
 #define CoapParser_h
 
 #include "Arduino.h"
-
 //nie robilem tego jako parse() i zapisywaie wartosci do pół + gettery, bo szkoda pamieci
 //jesli w arduino nie ejst zla praktyka tworzenie obiektow w loopie to warto przerobic to troche - popki co widziałem
 //tylko obiekty deklarowane w globalnych zmiennych
@@ -15,8 +14,9 @@
 class CoapParser
 {
   public:
-    const int FIELD_MAX_LENGHT = 200;
-    char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
+    static const int FIELD_MAX_LENGHT = 200;
+    static const int UDP_BUFFER_SIZE = 8192;
+    char packetBuffer[UDP_BUFFER_SIZE];
     char fieldValue[FIELD_MAX_LENGHT];
 
 
@@ -48,7 +48,7 @@ class CoapParser
     //getOption
     uint32_t getNextOption(char* message) ;
     //zwraca długość pola danych
-    uint8_t getPayloadSize();
+    uint8_t getPayloadSize(char* message);
     // zwraca wskaznik na tablice, w ktorej zapisany jest payload, 
     //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
@@ -58,7 +58,7 @@ class CoapParser
     uint8_t _currentOptionStart;
     uint8_t _payloadStart;
     uint32_t getOptionLen(char* message, uint8_t startBase, uint8_t startExtended);
-    uint32_t computeOptLenOffset(uint32_t optionLen);
+    uint8_t computeOptLenOffset(uint32_t optionLen);
 };
 
 #endif

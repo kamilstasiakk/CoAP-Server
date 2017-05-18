@@ -1,6 +1,3 @@
-#include "Arduino.h"
-#include <Ethernet.h>
-#include <EthernetUdp.h>
 /*
   Resource.h
   Created in 2017 by:
@@ -27,7 +24,7 @@
    - observators: tablica obserwatorów zapisanych do śledzenia stanu danego zasobu
     (aktywna tylko w momencie, gdy dany zasob może być obserwowalny)
 */
-struct Resource; {
+struct Resource {
   char* uri;
   char* resourceType;
   char* interfaceDescription;
@@ -41,7 +38,6 @@ struct Resource; {
      OBSERVE - 0.cannot / 1.can
   */
   uint8_t flags;
-  Observator observators[MAX_OBSERVATORS_COUNT];
+  //Observator observators[MAX_OBSERVATORS_COUNT];
 
 };
-

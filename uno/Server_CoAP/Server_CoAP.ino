@@ -1,3 +1,9 @@
+#include <Resources.h>
+
+#include <CoapParser.h>
+
+#include <CoapBuilder.h>
+
 /*
   CoapServer.ino
   Created in 2017 by:textValue
@@ -22,8 +28,7 @@
 #include <EthernetUdp.h>
 
 // include our librares;
-#include "Resource.h"
-#include <CoapParser_h>
+
 
 
 // constant variables neccessary for RF24 wireless connection;
@@ -57,7 +62,7 @@ Etag globalEtags[MAX_ETAG_COUNT]; // globalna lista etagow
 uint32_t globalEtagCounter = 2;  // 0 i 1 zarezerwowane dla rejestracji
 
 CoapParser parser = CoapParser();
-Builder builder = Builder();
+CoapBuilder builder = CoapBuilder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
 void setup() {
@@ -80,37 +85,37 @@ void loop() {
 void initializeResourceList() {
   // lampka
   resources[0].uri = "/sensor/lamp";
-  resources[0].rt = "Lamp";
-  resources[0].if = "state";
-  resources[0].textValue = 0; //OFF
+  resources[0].resourceType = "Lamp";
+  resources[0].interfaceDescription = "state";
+  strcpy(resources[0].textValue, "0"); //OFF
   resources[0].flags = B00000010;
 
   // przycisk
   resources[1].uri = "/sensor/button";
-  resources[1].rt = "Button";
-  resources[1].if = "state";
-  resources[1].textValue = 0;
+  resources[1].resourceType = "Button";
+  resources[1].interfaceDescription = "state";
+  strcpy(resources[1].textValue, "0");
   resources[1].flags = B00000101;
 
   // metryka PacketLossRate
   resources[2].uri = "/metric/PLR";
-  resources[2].rt = "PacketLossRate";
-  resources[2].if = "value";
-  resources[2].textValue = 0; //OFF
+  resources[2].resourceType = "PacketLossRate";
+  resources[2].interfaceDescription = "value";
+  strcpy(resources[2].textValue, "0"); //OFF
   resources[2].flags = B00000000;
 
   // metryka ByteLossRate
   resources[3].uri = "/metric/BLR";
-  resources[3].rt = "ByteLossRate";
-  resources[3].if = "value";
-  resources[3].textValue = 0;
+  resources[3].resourceType = "ByteLossRate";
+  resources[3].interfaceDescription = "value";
+  strcpy(resources[3].textValue, "0");
   resources[3].flags = B00000000;
 
   // metryka MeanAckDelay
   resources[4].uri = "/metric/MAD";
-  resources[4].rt = "MeanACKDelay";
-  resources[4].if = "value";
-  resources[4].textValue = 0;
+  resources[4].resourceType = "MeanACKDelay";
+  resources[4].interfaceDescription = "value";
+  strcpy(resources[4].textValue, "0");
   resources[4].flags = B00000000;
 
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
@@ -140,7 +145,7 @@ void receiveRF24Message() {
     RF24NetworkHeader header;
     byte rf24Message;
     network.read(header, rf24Message, sizeof(rf24Message));
-    getMessageFromThing(byte rf24Message);
+    getMessageFromThing(rf24Message);
   }
 }
 /*
@@ -171,8 +176,8 @@ void receiveEthernetMessage() {
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if (packetSize) {
     if (packetSize >= 4) {
-      Udp.read(ethMessage, MAX_BUFFER)
-      getCoapClienMessage(ethMessage);
+      Udp.read(ethMessage, MAX_BUFFER);
+      (ethMessage, Udp.remoteIP(), Udp.remotePort());
     }
   }
 }
@@ -183,8 +188,8 @@ void receiveEthernetMessage() {
     - port jest numerem portu hosta, do którego adresuemy wiadomość
 */
 void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
-  size_t messageSize = strlen(char* message);
-  Udp.beginPacket(ip), port);
+  size_t messageSize = strlen(message);
+  Udp.beginPacket(ip, port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
 
@@ -207,42 +212,42 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
     - EMPTY: taki kod może miec tylko wiadomośc typu ACK lub RST (inaczej wyślij bład BAD_REQUEST);
     - GET, PUT: taki kod może miec tylko wiadomość typu CON lub NON (inaczej wyślij błąd BAD_REQUEST);
 */
-void getCoapClienMessage(char* message) {
+void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
   if (parser.parseVersion(message) != 1) {
-    sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "WRONG VERSION TYPE");
+    sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG VERSION TYPE");
     return;
   }
   else if ( parser.parseCodeClass(message) != CLASS_REQ) {
-    sendErrorResponse(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "WRONG CLASS TYPE");
+    sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG CLASS TYPE");
     return;
   }
 
   switch (parser.parseCodeDetail(message)) {
     case DETAIL_EMPTY:
       if ( (parser.parseType(message) == TYPE_ACK) || (parser.parseType(message) == TYPE_RST) ) {
-        receiveEmptyRequest(message);
+        receiveEmptyRequest(message, ip, port);
         return;
       }
       break;
     case DETAIL_GET:
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
-        receiveGetRequest(message);
+        receiveGetRequest(message, ip, port);
         return;
       }
       break;
     case DETAIL_PUT:
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
-        receivePutRequest(message);
+        receivePutRequest(message, ip, port);
         return;
       }
       break;
     default:
-      sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "WRONG DETAIL CODE");
+      sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG DETAIL CODE");
       return;
   }
 
   /* wyślij błąd oznaczający zły typ widomości do danego kodu detail */
-  sendErrorMessage(udp.remoteIP(), udp.remotePort(), message, BAD_REQUEST, "WRONG TYPE OF MESSAGE");
+  sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG TYPE OF MESSAGE");
 }
 
 /*
@@ -277,18 +282,18 @@ void getCoapClienMessage(char* message) {
       -
 */
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
-  char etagOptionValue[8] = 0;
-  uint8_t etagCounter = 0;  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
-  char observeOptionValue[3] = 2; // klient może wysłac jedynie 0 lub 1
-  char uriPath[255] = 0;
-  char acceptOptionValue[2] = 0;
+  char etagOptionValue[8] = "";
+  uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
+  char observeOptionValue[3] = {'0','0','2'}; // klient może wysłac jedynie 0 lub 1
+  char uriPath[255] = "";
+  char acceptOptionValue[2] = "";
 
   /*---wczytywanie opcji-----------------------------------------------------------------------------*/
   uint8_t optionNumber = parser.getFirstOption(message);
   if ( optionNumber != URI_PATH ) {
     if ( optionNumber > URI_PATH ) {
       /* pierwsza opcja ma numer większy niż URI-PATH - brak wskazania zasobu */
-      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO URI");
+      sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
       return;
     }
     else {
@@ -296,15 +301,15 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       while ( optionNumber != URI_PATH ) {
         if ( optionNumber == ETAG ) {
           /* wystąpiła opcja ETAG, zapisz jej zawartość */
-          etagOptionValue = parser.fieldValue;
+          strcpy(etagOptionValue, parser.fieldValue);
         }
         if ( optionNumber == OBSERVE ) {
           /* wystąpiła opcja OBSERVE, zapisz jej zawartość */
-          observeOptionValue = parser.fieldValue;
+          strcpy(observeOptionValue, parser.fieldValue);
         }
         if ( optionNumber > URI_PATH || optionNumber == NO_OPTION ) {
           /* brak opcji URI-PATH - brak wskazania zasobu */
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO URI");
+          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
           return;
         }
         optionNumber = parser.getNextOption(message);
@@ -313,14 +318,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   } // end of if (firstOption != URI_PATH)
 
   /* odczytujemy wartość URI-PATH */
-  uriPath = parser.fieldValue;
+  strcpy(uriPath, parser.fieldValue);
 
   /* przeglądamy dalsze opcje wiadomości w celu odnalezienia opcji ACCEPT */
   optionNumber = parser.getNextOption(message);
   while ( optionNumber != NO_OPTION ) {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
-      acceptOptionValue = parser.fieldValue;
+      strcpy(acceptOptionValue, parser.fieldValue);
       break;
     }
   }
@@ -419,7 +424,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       if (  etagOptionValue != 0 ) {
         /* sprawdzamy, czy dany klient jest zapisany na liście obserwatorów */
 
-        observatorIndex = checkIfClientIsObserving(char* message, ip, portNumber, observatorIndex);    
+        observatorIndex = checkIfClientIsObserving(message, ip, portNumber, observatorIndex);    
       
         /* jeżeli obserwator znalazł się, to na pewno jego index jest mniejszy niż maksymalna pojemność listy */
         if ( observatorIndex < MAX_OBSERVATORS_COUNT) {
@@ -635,7 +640,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
 }
 
-private int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, int observatorIndex, int resourceNumber) {
+int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, int observatorIndex, int resourceNumber) {
   if ( observatorIndex == (MAX_OBSERVATORS_COUNT + 1) ) {
     /*nie było opcji observe, trzeba sprawdzić czy klient jest na liscie obserwatorów*/
     for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
@@ -804,7 +809,7 @@ void sendEmptyAckResponse(Session * session, char* message) {
   builder.setCodeClass(CLASS_REQ);
   builder.setCodeDetail(DETAIL_EMPTY);
   builder.setMessageId(parser.parseMessageId(message));
-  response = builder.buildAckHeader();
+  response = builder.build();
   sendEthernetMessage(response, session.ipAddress, session.portNumber)
 }
 /*
@@ -1017,6 +1022,7 @@ void getMessageFromThing(byte message) {
     }
     // porzuć wiadomość innną niż response
   }
+}
   /*  DO ZWERYFIKOWANIA POPRAWNOŚCI
       Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
   */

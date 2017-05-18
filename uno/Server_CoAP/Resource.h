@@ -1,6 +1,3 @@
-#include "Arduino.h"
-#include <Ethernet.h>
-#include <EthernetUdp.h>
 /*
   Resource.h
   Created in 2017 by:
