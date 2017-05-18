@@ -27,12 +27,10 @@
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 
-// include our librares;
 
 
-
-// constant variables neccessary for RF24 wireless connection;
-const uint16_t THIS_NODE_ID = 1;
+  // constant variables neccessary for RF24 wireless connection;
+  const uint16_t THIS_NODE_ID = 1;
 const uint16_t REMOTE_NODE_ID = 0;
 const uint8_t RF_CHANNEL = 60;
 
@@ -423,8 +421,8 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wartości parametrów ETAG----------------------------------------------------------------------------- */
       if (  etagOptionValue != 0 ) {
         /* sprawdzamy, czy dany klient jest zapisany na liście obserwatorów */
-
         observatorIndex = checkIfClientIsObserving(message, ip, portNumber, observatorIndex);
+
 
         /* jeżeli obserwator znalazł się, to na pewno jego index jest mniejszy niż maksymalna pojemność listy */
         if ( observatorIndex < MAX_OBSERVATORS_COUNT) {
@@ -434,7 +432,6 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
           for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
             if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.etagId = etagOptionValue ) {
               /* znaleziono etag pasujący do żądanego */
-
               /* sprawdz, czy dana wartość jest nadal aktualna */
               if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.savedValue == resources[resourceNumber].textValue ) {
                 /* wartość związana z etagiem jest nadal aktualna */
@@ -640,6 +637,9 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
 }
 
+/**
+   Metoda odpowiedzialna za wyszukiwanie klienta w liście obserwatorów
+*/
 int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, int observatorIndex, int resourceNumber) {
   if ( observatorIndex == (MAX_OBSERVATORS_COUNT + 1) ) {
     /*nie było opcji observe, trzeba sprawdzić czy klient jest na liscie obserwatorów*/
@@ -658,8 +658,63 @@ int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, i
 }
 }
 
+/**
+   Metoda odpowiedzialna za obsługe wiadomości ACK i RST
+   Takie wiaodmości mogą być wysłane jedynie w odpowiedzi na wiadomość aktualizacyjną stan zasobu
+   - przeszukujemy listę sesji;
+   - jeśeli wiadomość typu ack:
+      - zmieniamy status sesji na wolny;
 
+   - jeżeli wiaodmość typu rst:
+      - szukamy klienta w liscie obserwatorów
+      - zmieniamy stan obserwatora na wolny (usuwamy klienta)
+*/
 void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
+  /* przeszukujemy liste sesji */
+  for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+    if ((sessions[sessionNumber].details & 0x80) != 128) {
+      /* sesja zajęta */
+      if ( sessions[sessionNumber].ipAddress == ip ) {
+        if ( sessions[sessionNumber].port == portNumber ) {
+          /* znaleźliśmy sesję związana z danym klientem */
+
+          if ( parser.parseType(message) == TYPE_ACK ) {
+            /* wiadomość typu ack */
+
+            /* zmień status sesji na wolny */
+            sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+            return;
+          }
+
+          if ( parser.parseType(message) == TYPE_RST ) {
+            /* wiadomośc typu rst */
+
+            /* szukamy obserwatora w sesji*/
+            for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
+              if ( sessions[sessionNumber].resource.observators[observatorIndex].details < 128 ) {
+                /* dany wpis jest oznaczony jako aktywny */
+                if ( sessions[sessionNumber].resource.observators[observatorIndex].ipAddress == ip ) {
+                  if ( sessions[sessionNumber].resource.observators[observatorIndex].port == portNumber ) {
+                    if ( sessions[sessionNumber].resource.observators[observatorIndex].token == sessions[sessionNumber].token ) {
+                      /* znaleźliśmy obserwatora na liście obserwatorów */
+
+                      /* usuwamy klienta z listy obserwatorów */
+                      sessions[sessionNumber].resource.observators[observatorIndex].details = (sessions[sessionNumber].resource.observators[observatorIndex].details | (1 << 7))
+
+                          /* zmień status sesji na wolny */
+                          sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
 
 }
 /*
@@ -810,6 +865,7 @@ void sendEmptyAckResponse(Session * session, char* message) {
   builder.setCodeClass(CLASS_REQ);
   builder.setCodeDetail(DETAIL_EMPTY);
   builder.setMessageId(parser.parseMessageId(message));
+
   strcpy(response, builder.build());
   sendEthernetMessage(response, session->ipAddress, session->portNumber);
 }
@@ -843,22 +899,22 @@ void sendPutResponse(Session * session) {
 }
 
 
-/*
-    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
-    - wersja protokołu: 1;
-    - typ wiadomości: NON
-    - kod wiadomości: 2.05 content
-    - messageID: dowolna watość (ustawiamy jako 0);
-    - token: podany jako parametr wywołania;
-    - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
-    - ładunek: przekazany jako parametr;
+                  /*
+                      Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
+                      - wersja protokołu: 1;
+                      - typ wiadomości: NON
+                      - kod wiadomości: 2.05 content
+                      - messageID: dowolna watość (ustawiamy jako 0);
+                      - token: podany jako parametr wywołania;
+                      - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
+                      - ładunek: przekazany jako parametr;
 
-    - budujemy wiadomość zwrotną;
-    - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
+                      - budujemy wiadomość zwrotną;
+                      - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
 
-    (wiadomość taka z opcją observe może być stworzona w momencie, gdy serwer nie ma już wolnych zasobó na nowe etagi
-    ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
-*/
+                      (wiadomość taka z opcją observe może być stworzona w momencie, gdy serwer nie ma już wolnych zasobó na nowe etagi
+                      ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
+                  */
 void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, char* payloadValue, bool addObserveOption) {
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
@@ -911,8 +967,8 @@ void sendContentResponseWithEtag(Session session) {
 
   builder.setToken(session.token);
   builder.setMessageId(session.messageID);
-
   builder.setOption(ETAG, session.etag.etagId);
+
   builder.setOption(OBSERVE, ++observeCounter);
 
   //TODO zalezc
@@ -951,6 +1007,7 @@ void sendValidResponse(Session session) {
   builder.setCodeDetail(3);
 
   builder.setToken(session.token);
+
   builder.setMessageId(session.messageID);
 
   builder.setOption(ETAG, session.etag.etagId);
@@ -963,21 +1020,6 @@ void sendValidResponse(Session session) {
   sendEthernetMessage(response, session.ipAddress, session.portNumber);
 }
 
-
-
-
-/*  TO_DO: Trzeba by dorobić sprawdzanie, czy nowa wartość równa się tej żądanej w PUT.
-    Metoda odpowiedzialna za analizę twającej sesji.
-    - sprawdzamy typ sesji;
-    - jeżeli PUT (1) to:
-      - wyślij wiadomośc powrotną z kodem 2.04 (success.changed) oraz z tym samym tokenem;
-*/
-void analyseSession(Session * session) {
-  if ( ((session->details & 0x60) >> 5) == 1 ) {
-    // PUT
-    sendPutResponse(session);
-  }
-}
 // END:CoAP_Methodes-----------------------------
 
 
@@ -1011,12 +1053,19 @@ void getMessageFromThing(byte message) {
         strcpy(resources[resourceNumber].textValue, (message & 0x07));
 
 
+
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
           if ( ((sessions[sessionNumber].details & 0x80) == 128)
                && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
-            analyseSession(&sessions[sessionNumber]);
+            if ( ((session.detail & 0x60) >> 5) == 1 ) {
+              // PUT
+              sendPutResponse(session);
+
+              /* zmień stan sesji na wolny */
+              sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+            }
           }
         }
       }
@@ -1025,7 +1074,8 @@ void getMessageFromThing(byte message) {
     // porzuć wiadomość innną niż response
   }
 }
-/*  DO ZWERYFIKOWANIA POPRAWNOŚCI
+/*  
+
     Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
 */
 void sendMessageToThing(uint8_t type, uint8_t sensorID, uint8_t value) {
