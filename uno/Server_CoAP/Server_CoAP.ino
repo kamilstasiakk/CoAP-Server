@@ -29,8 +29,8 @@
 
 
 
-  // constant variables neccessary for RF24 wireless connection;
-  const uint16_t THIS_NODE_ID = 1;
+// constant variables neccessary for RF24 wireless connection;
+const uint16_t THIS_NODE_ID = 1;
 const uint16_t REMOTE_NODE_ID = 0;
 const uint8_t RF_CHANNEL = 60;
 
@@ -363,19 +363,18 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                       /* usuń klienta z listy obserwatorów - zmień status na wolny */
                       resources[resourceNumber].observators[observatorIndex].details = (observators[observatorIndex].details | 0x80);
                       break;
-                    }
-                    else {
+                    } else {
                       /* sprawdzamy, czy zmieniła się wartość tokena */
-                      if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) == 0) {
-                      /* dany klient jest już zapisany na liście obserwatorów */
-                      alreadyExist = true;
-                      break;
-                    }
-                    else {
-                      /* aktualizujemy numer tokena przypisanego do danego obserwatora */
-                      resources[resourceNumber].observators[observatorIndex].token = parser.parseToken(message, parser.parseTokenLen(message));
+                      if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) == 0)) {  
+                        /* dany klient jest już zapisany na liście obserwatorów */
                         alreadyExist = true;
                         break;
+                      }
+                      else {
+                        /* aktualizujemy numer tokena przypisanego do danego obserwatora */
+                        resources[resourceNumber].observators[observatorIndex].token = parser.parseToken(message, parser.parseTokenLen(message));
+                          alreadyExist = true;
+                          break;
                       }
                     }
                   }
@@ -399,19 +398,19 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
               /*  jeżeli lista jest pełna to wyślij błąd INTERNAL_SERVER_ERROR  */
               if (observatorIndex == MAX_OBSERVATORS_COUNT - 1 ) {
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "OBSERV LIST FULL");
+                sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "OBSERV LIST FULL");
                 return;
               }
             }
           }
           else {
             /* zasób nie może być obserwowany  - pomijamy opcje, wiadomośc zwrotna nie będzie zawierać opcji observe */
-            observeOptionValue = 2;
+            observeOptionValue = "2";
           }
         }
         else {
           /* podano błędną wartość opcji OBSERVE - wyślij bład */
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "WRONG OBSERVE VALUE");
+          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "WRONG OBSERVE VALUE");
           return;
         }
       }
@@ -421,7 +420,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wartości parametrów ETAG----------------------------------------------------------------------------- */
       if (  etagOptionValue != 0 ) {
         /* sprawdzamy, czy dany klient jest zapisany na liście obserwatorów */
-        observatorIndex = checkIfClientIsObserving(message, ip, portNumber, observatorIndex);
+        observatorIndex = checkIfClientIsObserving(message, ip, portNumber, observatorIndex, resourceNumber);
 
 
         /* jeżeli obserwator znalazł się, to na pewno jego index jest mniejszy niż maksymalna pojemność listy */
@@ -456,7 +455,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                 }
 
                 /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
                 return;
               }
               else {
@@ -493,7 +492,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                             }
                           }
                           /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                          sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
                           return;
                         }
                       }
@@ -526,12 +525,12 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                           }
                         }
                         /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                        sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                        sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
                         return;
                       }
                       else {
                         /* brak miejsca na nowy etag - zwróc wiadomość 2.05 content bez opcji etag, z opcją observe */
-                        sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                        sendContentResponse(ip, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
                         return;
                       }
                     }
@@ -576,7 +575,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                     }
 
                     /* Brak wolnej sesji - wyslij odpowiedź z kodem błedu */
-                    sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                    sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
                     return;
                   }
                 }
@@ -587,13 +586,13 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
             }
           }
           /* nie znaleziono wartości etag na liście etagów przpisanych do danego klienta - wyślij odpowiedz z kodem błedu 4.04 NOT_FOUND */
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "ETAG NOT FOUND");
+          sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "ETAG NOT FOUND");
           return;
         }
         else {
           /* klient nie jest zapisany na liście obserwatorów - nie analizuj opcji etag */
           /* wyślij odpowiedz z kodem błedu 4.02 Method Not Allowed */
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED, "YOU HAVE TO BE AN OBSERVATOR TO USE ETAG");
+          sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "YOU HAVE TO BE AN OBSERVATOR TO USE ETAG");
           return;
         }
       }
@@ -603,7 +602,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
 
       /*-----analiza wiadomości z opcjami accept + observe + URI_PATH----------------------------------------------------------*/
-      if ( observeOptionValue != 2  &&  acceptOptionValue = 0 ) {
+      if ( observeOptionValue != 2  &&  acceptOptionValue == 0 ) {
 
       }
       /*-----koniec analizy wiadomości z opcjami accept + observe + URI_PATH-------------------------------------------------- */
@@ -612,14 +611,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
       if ( observeOptionValue != 2 ) {
         /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
-        sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+        sendContentResponse(ip, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
         return;
       }
       /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
 
 
       /*-----analiza wiadomości z opcją accept + URI_PATH----------------------------------------------------------*/
-      if ( acceptOptionValue = 0 ) {
+      if ( acceptOptionValue == 0 ) {
 
       }
       /*-----koniec analizy wiadomości o opcją accept + URI_PATH------------------------------------------------- */
@@ -627,14 +626,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
       /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
       /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
-      sendContentResponse(ip, portNumber, parser.parseToken(message), resources[resourceNumber].textValue, false);
+      sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), resources[resourceNumber].textValue, false);
       /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
     }  //if (strcmp(resources[resourceNumber].uri, uriPath) == 0)
   } //for loop (przeszukiwanie zasobu)
 
   /* nie znaleziono zasobu na serwerze */
   /* wiadomość zwrotna zawierająca kod błedu 4.04 NOT_FOUND */
-  sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
+  sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
 }
 
 /**
@@ -647,15 +646,16 @@ int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, i
       if ( resources[resourceNumber].observators[observatorIndex].details < 128 ) {
         if ( resources[resourceNumber].observators[observatorIndex].ipAddress == ip ) {
           if ( resources[resourceNumber].observators[observatorIndex].portNumber == portNumber ) {
-            if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) == 0) {
+            if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) )) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
             /* znaleziono klienta na liście obserwatorów */
-            return observatorIndex;
+              break;
+            }
           }
         }
       }
     }
   }
-}
+  return observatorIndex;
 }
 
 /**
@@ -675,7 +675,7 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
     if ((sessions[sessionNumber].details & 0x80) != 128) {
       /* sesja zajęta */
       if ( sessions[sessionNumber].ipAddress == ip ) {
-        if ( sessions[sessionNumber].port == portNumber ) {
+        if ( sessions[sessionNumber].portNumber == portNumber ) {
           /* znaleźliśmy sesję związana z danym klientem */
 
           if ( parser.parseType(message) == TYPE_ACK ) {
@@ -690,7 +690,7 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
             /* wiadomośc typu rst */
 
             /* szukamy obserwatora w sesji*/
-            for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
+            for (int observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
               if ( sessions[sessionNumber].resource.observators[observatorIndex].details < 128 ) {
                 /* dany wpis jest oznaczony jako aktywny */
                 if ( sessions[sessionNumber].resource.observators[observatorIndex].ipAddress == ip ) {
@@ -716,7 +716,6 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
   }
 }
 
-}
 /*
     Metoda odpowiedzialna za analizę wiadomości typu PUT:
     Wiadomość zawiera opcje: URI-PATH, CONTENT-FORMAT oraz payload z nową wartością;
@@ -736,13 +735,13 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
   uint8_t optionNumber = parser.getFirstOption(message);
   if (optionNumber != URI_PATH) {
     if (optionNumber > URI_PATH) {
-      sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO URI");
+      sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
       return;
     } else {
       while (optionNumber != URI_PATH)  {
         //nie ma uri! BLAD
         if (optionNumber > URI_PATH || optionNumber == NO_OPTION) {
-          sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO URI");
+          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
           return;
         }
         optionNumber = parser.getNextOption(message);
@@ -761,16 +760,16 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
             // sesja wolna
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
-            sessions[sessionNumber].token = parser.parseToken(message, parser.parseTokenLen(message));
-            sessions[sessionNumber].id = ((resources[resourceNumber].flags & 0x0c) >> 2 );
+            strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
+            sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
             sessions[sessionNumber].details = B00100000;  // active, put, text
 
             // szukamy opcji ContentFormat
             optionNumber = parser.getNextOption(message);
-            while (optionNumber != CONTENT - FORMAT)  {
+            while (optionNumber != CONTENT_FORMAT)  {
               //nie ma content-format! BLAD
-              if (optionNumber > CONTENT - FORMAT || optionNumber == NO_OPTION) {
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
+              if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
+                sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
                 return;
               }
               optionNumber = parser.getNextOption(message);
@@ -790,11 +789,11 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
                 sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
               }
               else {
-                sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
+                sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
                 return;
               }
             } else {
-              sendErrorResponse(udp.remoteIP(), udp.remotePort(), ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
+              sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
               return;
             }
 
@@ -804,7 +803,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
             }
 
             // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].id, parser.parsePayload(message));
+            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message));
             return;
           } // end of (sessions[sessionNumber].contentFormat > 127)
 
@@ -899,22 +898,22 @@ void sendPutResponse(Session * session) {
 }
 
 
-                  /*
-                      Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
-                      - wersja protokołu: 1;
-                      - typ wiadomości: NON
-                      - kod wiadomości: 2.05 content
-                      - messageID: dowolna watość (ustawiamy jako 0);
-                      - token: podany jako parametr wywołania;
-                      - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
-                      - ładunek: przekazany jako parametr;
+/*
+    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
+    - wersja protokołu: 1;
+    - typ wiadomości: NON
+    - kod wiadomości: 2.05 content
+    - messageID: dowolna watość (ustawiamy jako 0);
+    - token: podany jako parametr wywołania;
+    - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
+    - ładunek: przekazany jako parametr;
 
-                      - budujemy wiadomość zwrotną;
-                      - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
+    - budujemy wiadomość zwrotną;
+    - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
 
-                      (wiadomość taka z opcją observe może być stworzona w momencie, gdy serwer nie ma już wolnych zasobó na nowe etagi
-                      ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
-                  */
+    (wiadomość taka z opcją observe może być stworzona w momencie, gdy serwer nie ma już wolnych zasobó na nowe etagi
+    ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
+*/
 void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, char* payloadValue, bool addObserveOption) {
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
@@ -1059,9 +1058,9 @@ void getMessageFromThing(byte message) {
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
           if ( ((sessions[sessionNumber].details & 0x80) == 128)
                && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
-            if ( ((session.detail & 0x60) >> 5) == 1 ) {
+            if ( ((sessions[sessionNumber].details & 0x60) >> 5) == 1 ) {
               // PUT
-              sendPutResponse(session);
+              sendPutResponse(&sessions[sessionNumber]);
 
               /* zmień stan sesji na wolny */
               sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
@@ -1074,7 +1073,7 @@ void getMessageFromThing(byte message) {
     // porzuć wiadomość innną niż response
   }
 }
-/*  
+/*
 
     Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
 */

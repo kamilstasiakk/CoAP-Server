@@ -152,7 +152,7 @@ struct Session {
   uint16_t portNumber;
   
   char messageID[2];  // do weryfikowania, czy nasza odpowiedź została potwierdzona
-  char etag[8];
+  Etag etag;
   char token[8];
   
   uint8_t sensorID;
