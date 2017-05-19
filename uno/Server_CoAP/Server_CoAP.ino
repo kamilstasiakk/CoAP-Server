@@ -394,7 +394,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                   observators[observatorIndex].portNumber = portNumber;
                   strcpy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
                   observators[observatorIndex].details = (observators[observatorIndex].details & 0x7f);
-                  observators[observatorIndex].resource = resources[resourceNumber];
+                  observators[observatorIndex].resource = &resources[resourceNumber];
                   alreadyExist = true;
                   break;
                 }
@@ -433,10 +433,10 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
           /* znajdź wartość etaga w liscie etagów przypisanych do danego obserwatora */
           for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-            if ( observators[observatorIndex].etagsKnownByTheObservator.etagId = etagOptionValue ) {
+            if ( strcmp(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, etagOptionValue) == 0 ) {
               /* znaleziono etag pasujący do żądanego */
               /* sprawdz, czy dana wartość jest nadal aktualna */
-              if (observators[observatorIndex].etagsKnownByTheObservator.savedValue == resources[resourceNumber].textValue ) {
+              if (observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->savedValue == resources[resourceNumber].textValue ) {
                 /* wartość związana z etagiem jest nadal aktualna */
                 /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
                 for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
@@ -445,12 +445,12 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                     sessions[sessionNumber].ipAddress = ip;
                     sessions[sessionNumber].portNumber = portNumber;
                     sessions[sessionNumber].messageID = ++messageId;
-                    sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                    strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                     sessions[sessionNumber].etagValue = etagOptionValue;
                     sessions[sessionNumber].details = 0;  // active, put, text
 
                     /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                    resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.timestamp = (millis() / 1000);
+                    observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->timestamp = (millis() / 1000);
 
                     /* wysyłamy wiadomość 2.03 Valid z opcją Etag, bez payloadu i kończymy wykonywanie funkcji */
                     sendValidResponse(sessions[sessionNumber]);
@@ -467,13 +467,13 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
                 /* szukamy, czy dany zasób ma już przypisany etag do takiej wartości jaką ma obecnie */
                 for (int globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
-                  if ( globalEtags[globalIndex].resource == resources[resourceNumber] ) {
+                  if ( strcmp(globalEtags[globalIndex].resource->uri, resources[resourceNumber].uri ) == 0) {
                     if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].textValue ) {
                       /* znaleziono globalny etag skojarzony z danym zasobem i danym stanem zasobu */
 
                       /* przeszukujemy listę etagów, ktore są znane obserwatorowi w celu znalezienia aktualnego etaga */
                       for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-                        if (resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagIndex] == globalEtags[globalIndex] ) {
+                        if (strcmp(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, globalEtags[globalIndex].etagId) == 0) {
                           /* znaleźliśmy etaga aktualnego w liście etagów znanych klientówi */
 
                           /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
@@ -483,12 +483,12 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                               sessions[sessionNumber].ipAddress = ip;
                               sessions[sessionNumber].portNumber = portNumber;
                               sessions[sessionNumber].messageID = ++messageId;
-                              sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                              strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                               sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
                               sessions[sessionNumber].details = 0;  // active, put, text
 
                               /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                              resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagCounter].timestamp = (millis() / 1000);
+                              observators[observatorIndex].etagsKnownByTheObservator[etagCounter]->timestamp = (millis() / 1000);
 
                               /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
                               sendContentResponseWithEtag(sessions[sessionNumber]);
@@ -503,7 +503,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
                       /* nie ma etaga aktualnego na liście etagów znanych klientowi - wysyłamy wiadomość 2.05 Content z aktualnym etagiem jako opcją*/
                       /* sprawdzamy, czy do danego klienta możemy jeszcze dodać nowy etag */
-                      if ( resources[resourceNumber].observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ) {
+                      if ( observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ) {
                         /* najpierw trzeba znaleźć sesję wolną, bo jak nie będzie sesji to klient nadal nie będzie wiedział o tym etagu */
                         /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
                         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
@@ -511,17 +511,17 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                             /* sesja wolna */
 
                             /* mozna dołożyć wskaźnik do tablicy obserwatora */
-                            resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
+                            observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
 
                             sessions[sessionNumber].ipAddress = ip;
                             sessions[sessionNumber].portNumber = portNumber;
                             sessions[sessionNumber].messageID = ++messageId;
-                            sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                            strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                             sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
                             sessions[sessionNumber].details = 0;  // active, put, text
 
                             /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                            resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[etagCounter].timestamp = (millis() / 1000);
+                            observators[observatorIndex].etagsKnownByTheObservator[etagCounter]->timestamp = (millis() / 1000);
 
                             /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
                             sendContentResponseWithEtag(sessions[sessionNumber]);
@@ -534,7 +534,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                       }
                       else {
                         /* brak miejsca na nowy etag - zwróc wiadomość 2.05 content bez opcji etag, z opcją observe */
-                        sendContentResponse(ip, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                        sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
                         return;
                       }
                     }
@@ -548,7 +548,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                     /* jest wolne miejsce w tablicy */
 
                     /* tworzymy nowy wpis w tablicy globlnej etagów */
-                    globalEtags[globalIndex].resource = resources[resourceNumber];
+                    globalEtags[globalIndex].resource = &resources[resourceNumber];
                     globalEtags[globalIndex].savedValue = resources[resourceNumber].textValue;
                     globalEtags[globalIndex].etagId = ++globalEtagCounter;
                     globalEtags[globalIndex].timestamp = (millis() / 1000);
@@ -560,17 +560,17 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                         /* sesja wolna */
 
                         /* dodajemy dany wpis do lokalnej tablicy danego obserwatora */
-                        resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
+                        observators[observatorIndex].etagsKnownByTheObservator[++etagCounter] = &globalEtags[globalIndex];
 
                         sessions[sessionNumber].ipAddress = ip;
                         sessions[sessionNumber].portNumber = portNumber;
                         sessions[sessionNumber].messageID = ++messageId;
-                        sessions[sessionNumber].token = resources[resourceNumber].observators[observatorIndex].token;
+                        strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                         sessions[sessionNumber].etagValue = etagOptionValue;
                         sessions[sessionNumber].details = 0;  // active, put, text
 
                         /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                        resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.timestamp = (millis() / 1000);
+                        observators[observatorIndex].etagsKnownByTheObservator[etagIndex].timestamp = (millis() / 1000);
 
                         /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
                         sendContentResponseWithEtag(sessions[sessionNumber]);
@@ -584,7 +584,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                   }
                 }
                 /* brak miejsca na nową wartość etag - wyślij wiadomość 2.05 content z opcją observe, z ładunkiem, bez opcji etag */
-                sendContentResponse(ipAddress, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
                 return;
               }
             }
@@ -651,7 +651,7 @@ int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, i
         if ( observators[observatorIndex].details < 128 ) {
           if ( observators[observatorIndex].ipAddress == ip ) {
             if ( observators[observatorIndex].portNumber == portNumber ) {
-              if ( strcmp(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) )) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
+              if ( strcmp(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) ) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
                 /* znaleziono klienta na liście obserwatorów */
                 break;
               }
