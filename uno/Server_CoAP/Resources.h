@@ -1,7 +1,6 @@
 #include "Arduino.h"
 #include <Ethernet.h>
 #include <EthernetUdp.h>
-#include "Resource.h"
 /*
   Resource.h
   Created in 2017 by:
@@ -15,7 +14,7 @@ const int RESOURCES_COUNT = 5;
 const int MAX_SESSIONS_COUNT = 5;
 const int MAX_ETAG_COUNT = 20;
 const int MAX_ETAG_CLIENT_COUNT = 20;
-uint8_t MAX_OBSERVATORS_COUNT = 5;
+//uint8_t MAX_OBSERVATORS_COUNT = 5;
 
 // error codes
 uint16_t BAD_REQUEST = 400;
@@ -67,6 +66,23 @@ const uint8_t DEFAULT_SERVER_VERSION = 1;
 const uint8_t ETAG_MAX_OPTIONS_NUMBER = 3;
 const uint8_t ETAG_VALID_TIME_IN_SECONDS = 128;
 
+const int MAX_OBSERVATORS_COUNT = 5;
+
+struct Resource {
+  char* uri;
+  char* resourceType;
+  char* interfaceDescription;
+  char textValue[8];  // jedna z możliwych reprezentacji
+  /*
+     7 6 5 | 4 3 2 |   1  |    0
+           |   ID  |  PUT | OBSERVE
+
+     ID      - wartości 0-7
+     PUT    - 0.cannot / 1.can
+     OBSERVE - 0.cannot / 1.can
+  */
+  uint8_t flags;
+};
 
 
 /**
@@ -113,7 +129,7 @@ struct Observator {
   IPAddress ipAddress;
   uint16_t portNumber;
   char token[8];
-
+  Resource* resource;
   Etag* etagsKnownByTheObservator[MAX_ETAG_CLIENT_COUNT];
   uint8_t etagCounter;
   /*

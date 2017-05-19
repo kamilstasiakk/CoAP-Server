@@ -24,6 +24,10 @@
    - observators: tablica obserwatorów zapisanych do śledzenia stanu danego zasobu
     (aktywna tylko w momencie, gdy dany zasob może być obserwowalny)
 */
+const int MAX_OBSERVATORS_COUNT = 5;
+typedef struct Resource Resource;
+typedef struct Observator Observator;
+
 struct Resource {
   char* uri;
   char* resourceType;

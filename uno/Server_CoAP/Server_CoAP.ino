@@ -54,6 +54,7 @@ char ethMessage[MAX_BUFFER];
 // CoAP variables:
 Resource resources[RESOURCES_COUNT];
 Session sessions[MAX_SESSIONS_COUNT];
+Observator observators[MAX_OBSERVATORS_COUNT];
 
 uint32_t observeCounter = 0; // globalny licznik związany z opcją observe - korzystamy z niego, gdy serwer generuje wiadomość notification
 Etag globalEtags[MAX_ETAG_COUNT]; // globalna lista etagow
@@ -355,26 +356,28 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
             /* sprawdzenie, czy dany klient nie znajduje się już na liście obserwatorów dla danego zasobu */
             boolean alreadyExist = false;
             for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
-              if ( resources[resourceNumber].observators[observatorIndex].details < 128 ) {
-                /* dany wpis jest oznaczony jako aktywny */
-                if ( resources[resourceNumber].observators[observatorIndex].ipAddress == ip ) {
-                  if ( resources[resourceNumber].observators[observatorIndex].portNumber == portNumber ) {
-                    if ( observeOptionValue == "1" ) {
-                      /* usuń klienta z listy obserwatorów - zmień status na wolny */
-                      resources[resourceNumber].observators[observatorIndex].details = (observators[observatorIndex].details | 0x80);
-                      break;
-                    } else {
-                      /* sprawdzamy, czy zmieniła się wartość tokena */
-                      if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) == 0)) {  
-                        /* dany klient jest już zapisany na liście obserwatorów */
-                        alreadyExist = true;
+              if ( strcmp(observators[observatorIndex].resource->uri, resources[resourceNumber].uri)) {
+                if ( observators[observatorIndex].details < 128 ) {
+                  /* dany wpis jest oznaczony jako aktywny */
+                  if ( observators[observatorIndex].ipAddress == ip ) {
+                    if ( observators[observatorIndex].portNumber == portNumber ) {
+                      if ( observeOptionValue == "1" ) {
+                        /* usuń klienta z listy obserwatorów - zmień status na wolny */
+                        observators[observatorIndex].details = (observators[observatorIndex].details | 0x80);
                         break;
-                      }
-                      else {
-                        /* aktualizujemy numer tokena przypisanego do danego obserwatora */
-                        resources[resourceNumber].observators[observatorIndex].token = parser.parseToken(message, parser.parseTokenLen(message));
+                      } else {
+                        /* sprawdzamy, czy zmieniła się wartość tokena */
+                        if ( strcmp(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message))) == 0) {
+                          /* dany klient jest już zapisany na liście obserwatorów */
                           alreadyExist = true;
                           break;
+                        }
+                        else {
+                          /* aktualizujemy numer tokena przypisanego do danego obserwatora */
+                          strcpy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
+                          alreadyExist = true;
+                          break;
+                        }
                       }
                     }
                   }
@@ -385,12 +388,13 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
             /* jeżeli dany klient nie znajdował się na liście, to szukamy pierwszego wolnego miejsca aby go zapisać */
             if (!alreadyExist && observeOptionValue == "0") {
               for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++) {
-                if ( resources[resourceNumber].observators[observatorIndex].details >= 128) {
+                if ( observators[observatorIndex].details >= 128) {
                   /* jeżeli jest jeszcze miejsce na liście obserwatorów, to dopisz klienta */
-                  resources[resourceNumber].observators[observatorIndex].ipAddress = ip;
-                  resources[resourceNumber].observators[observatorIndex].portNumber = portNumber;
-                  resources[resourceNumber].observators[observatorIndex].token = parser.parseToken(message, parser.parseTokenLen(message));
-                  resources[resourceNumber].observators[observatorIndex].details = (observators[observatorIndex].details & 0x7f);
+                  observators[observatorIndex].ipAddress = ip;
+                  observators[observatorIndex].portNumber = portNumber;
+                  strcpy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
+                  observators[observatorIndex].details = (observators[observatorIndex].details & 0x7f);
+                  observators[observatorIndex].resource = resources[resourceNumber];
                   alreadyExist = true;
                   break;
                 }
@@ -429,10 +433,10 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
           /* znajdź wartość etaga w liscie etagów przypisanych do danego obserwatora */
           for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-            if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.etagId = etagOptionValue ) {
+            if ( observators[observatorIndex].etagsKnownByTheObservator.etagId = etagOptionValue ) {
               /* znaleziono etag pasujący do żądanego */
               /* sprawdz, czy dana wartość jest nadal aktualna */
-              if ( resources[resourceNumber].observators[observatorIndex].etagsKnownByTheObservator.savedValue == resources[resourceNumber].textValue ) {
+              if (observators[observatorIndex].etagsKnownByTheObservator.savedValue == resources[resourceNumber].textValue ) {
                 /* wartość związana z etagiem jest nadal aktualna */
                 /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
                 for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
@@ -580,7 +584,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                   }
                 }
                 /* brak miejsca na nową wartość etag - wyślij wiadomość 2.05 content z opcją observe, z ładunkiem, bez opcji etag */
-                sendContentResponse(ipAddress, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                sendContentResponse(ipAddress, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
                 return;
               }
             }
@@ -611,7 +615,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
       if ( observeOptionValue != 2 ) {
         /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
-        sendContentResponse(ip, portNumber, resources[resourceNumber].observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+        sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
         return;
       }
       /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
@@ -643,12 +647,14 @@ int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, i
   if ( observatorIndex == (MAX_OBSERVATORS_COUNT + 1) ) {
     /*nie było opcji observe, trzeba sprawdzić czy klient jest na liscie obserwatorów*/
     for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
-      if ( resources[resourceNumber].observators[observatorIndex].details < 128 ) {
-        if ( resources[resourceNumber].observators[observatorIndex].ipAddress == ip ) {
-          if ( resources[resourceNumber].observators[observatorIndex].portNumber == portNumber ) {
-            if ( strcmp(resources[resourceNumber].observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) )) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
-            /* znaleziono klienta na liście obserwatorów */
-              break;
+      if ( strcmp(observators[observatorIndex].resource->uri, resources[resourceNumber].uri)) {
+        if ( observators[observatorIndex].details < 128 ) {
+          if ( observators[observatorIndex].ipAddress == ip ) {
+            if ( observators[observatorIndex].portNumber == portNumber ) {
+              if ( strcmp(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) )) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
+                /* znaleziono klienta na liście obserwatorów */
+                break;
+              }
             }
           }
         }
