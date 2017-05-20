@@ -42,7 +42,7 @@ RF24Network network(radio);
 // variable connected with wired connection
 EthernetUDP Udp;
 byte mac[] = {00, 0xaa, 0xbb, 0xcc, 0xde, 0xf3};
-IPAddress ip = (192, 168, 1, 1);
+IPAddress ip(192, 168, 1, 1);
 short localPort = 1237;
 const uint8_t MAX_BUFFER = 100; //do zastanowienia
 char ethMessage[MAX_BUFFER];
@@ -61,17 +61,23 @@ CoapBuilder builder = CoapBuilder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
 void setup() {
+ 
   SPI.begin();
+  Serial.begin(9600);
   initializeRF24Communication();
   initializeEthernetCommunication();
 
   initializeResourceList();
+  Serial.println(".");
 }
 
 void loop() {
   // checking the network object regularly;
   network.update();
   receiveRF24Message();
+
+  receiveEthernetMessage();
+  
 }
 
 
@@ -157,6 +163,7 @@ void receiveRF24Message() {
 void sendRF24Message(byte message) {
   RF24NetworkHeader header;
   network.write(header, &message, sizeof(message));
+  Serial.println("-.-");
 }
 // END:RF23_Methodes----------------------------
 
@@ -174,12 +181,13 @@ void initializeEthernetCommunication() {
     - jeżeli pakiet ma mniej niż 4 bajty (minimalną wartośc nagłówka) to odrzucamy go;
     - jeżeli pakiet ma przynajmniej 4 bajty, zostaje poddany dalszej analizie;
 */
-void receiveEthernetMessage() {
+void receiveEthernetMessage() { 
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if (packetSize) {
     if (packetSize >= 4) {
+      Serial.println("receive");
       Udp.read(ethMessage, MAX_BUFFER);
-      (ethMessage, Udp.remoteIP(), Udp.remotePort());
+      getCoapClienMessage(ethMessage, Udp.remoteIP(), Udp.remotePort());
     }
   }
 }
@@ -194,6 +202,9 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
   Udp.beginPacket(ip, port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
+
+  Serial.println("send: ");
+  Serial.println(message);
 
   //jeżeli liczba danych przyjętych do wysłania przez warstwę niższą jest mniejsza niż rozmiar wiadomości to?
   if ( r < messageSize ) {
@@ -284,6 +295,7 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       -
 */
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
+  Serial.println("get");
   char etagOptionValues[ETAG_MAX_OPTIONS_COUNT][8];
   int etagValueNumber = 0;
   uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
