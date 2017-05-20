@@ -12,8 +12,8 @@
 
 const int RESOURCES_COUNT = 5;
 const int MAX_SESSIONS_COUNT = 5;
-const int MAX_ETAG_COUNT = 20;
-const int MAX_ETAG_CLIENT_COUNT = 20;
+const int MAX_ETAG_COUNT = 10;
+const int MAX_ETAG_CLIENT_COUNT = 3;
 //uint8_t MAX_OBSERVATORS_COUNT = 5;
 
 // error codes
@@ -63,10 +63,10 @@ const uint8_t DETAIL_DELETE = 4;
 const uint8_t DEFAULT_SERVER_VERSION = 1;
 
 // maksymalna liczba opcji etag możliwych w jednej wiadomości
-const uint8_t ETAG_MAX_OPTIONS_NUMBER = 3;
+const int ETAG_MAX_OPTIONS_COUNT = 3;
 const uint8_t ETAG_VALID_TIME_IN_SECONDS = 128;
 
-const int MAX_OBSERVATORS_COUNT = 5;
+const int MAX_OBSERVATORS_COUNT = 3;
 
 struct Resource {
   char* uri;
