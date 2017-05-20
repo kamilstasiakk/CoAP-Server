@@ -9,7 +9,7 @@
 CoapParser::CoapParser(){}
 
 //tylko wartosc 1 poprawna
-int CoapParser::parseVersion(char* message)
+uint8_t CoapParser::parseVersion(char* message)
 {
   return ((message[0] & 0xb0) >> 6);
 }
@@ -74,12 +74,15 @@ uint32_t CoapParser::getNextOption(char* message) {
     return 0;
     
   uint8_t type = (uint8_t) message[_currentOptionStart] & 0xf0;
-  
+  uint8_t offset = 0;
+  uint32_t optionLen = 0;
+  int optiontype = 0;
+  int i;
   switch (type) {
     case 13:
-      int optiontype = message[_currentOptionStart+1] + 13;
-      uint32_t optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+2);
-      uint8_t offset = computeOptLenOffset(optionLen);
+      optiontype = message[_currentOptionStart+1] + 13;
+      optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+2);
+      offset = computeOptLenOffset(optionLen);
       int i;
       for (i = 0; i < optionLen; i++) {
         fieldValue[i] = message[_currentOptionStart + 2 + offset + i];
@@ -89,10 +92,9 @@ uint32_t CoapParser::getNextOption(char* message) {
       return optiontype;
       break;
     case 14:
-      int optiontype =  message[_currentOptionStart+1] << 8 + message[_currentOptionStart+2] + 269;
-      uint32_t optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+3);
-      uint8_t offset = computeOptLenOffset(optionLen);
-      int i;
+      optiontype =  message[_currentOptionStart+1] << 8 + message[_currentOptionStart+2] + 269;
+      optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+3);
+      offset = computeOptLenOffset(optionLen);
       for (i = 0; i < optionLen; i++) {
         fieldValue[i] = message[_currentOptionStart + 3 + offset + i];
       }
@@ -105,9 +107,8 @@ uint32_t CoapParser::getNextOption(char* message) {
       return 0;
       break;
     default: 
-      uint32_t optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+1);
-      uint8_t offset = computeOptLenOffset(optionLen);
-      int i;
+      optionLen = getOptionLen(message, _currentOptionStart, _currentOptionStart+1);
+      offset = computeOptLenOffset(optionLen);
       for (i = 0; i < optionLen; i++) {
         fieldValue[i] = message[_currentOptionStart + 1 + offset + i];
       }
@@ -119,7 +120,7 @@ uint32_t CoapParser::getNextOption(char* message) {
 }
 
 
-private uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint8_t startExtended) {
+uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint8_t startExtended) {
   uint8_t len = (uint8_t) (message[startBase] & 0x0f);
   
   switch (len) {
@@ -139,12 +140,12 @@ private uint32_t CoapParser::getOptionLen(char* message, uint8_t startBase, uint
 }
 
 //okreslamy przesuniecie poczatku pola wartosc opcji spowodowane extended option len
-private uint32_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
+uint8_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
   if (optionLen < 13) 
         return 0;
       else if (optionLen < 269)
         return 1;
-      else if 
+      else
         return 2;
 }
 
@@ -156,8 +157,8 @@ char* CoapParser::parsePayload(char* message) {
   return fieldValue;
 }
 
-uint8_t CoapParser::getPayloadSize() {
-  return strlen(message) - _payloadStart;
+uint8_t CoapParser::getPayloadSize(char* message) {
+  return (strlen(message) - _payloadStart);
 }
 
 

@@ -1,4 +1,4 @@
-﻿#include "Arduino.h"
+#include "Arduino.h"
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 /*
@@ -100,7 +100,7 @@ struct Resource {
 struct Etag {
   Resource* resource;
   uint16_t savedValue;
-  char etagId[8];
+  uint32_t etagId;
   uint8_t timestamp;
 
   // token wyjmujemy z geta
@@ -167,7 +167,7 @@ struct Session {
   IPAddress ipAddress;
   uint16_t portNumber;
   
-  char messageID[2];  // do weryfikowania, czy nasza odpowiedź została potwierdzona
+  uint16_t messageID;  // do weryfikowania, czy nasza odpowiedź została potwierdzona
   Etag etag;
   char token[8];
   

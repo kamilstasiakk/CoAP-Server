@@ -27,33 +27,33 @@ void CoapBuilder::init()
 
 void CoapBuilder::setVersion(uint8_t value)
 {
-  message[0] & 0x3f += (value & 0x03) << 6;
+  message[0] = (message[0] & 0x3f) + (value & 0x03) << 6;
 }
 
 void CoapBuilder::setType(uint8_t value)
 {
-  message[0] & 0xaf += (value & 0x03) << 4;
+  message[0] = (message[0] & 0xaf) + (value & 0x03) << 4;
 }
 
-private CoapBuilder::setTokenLen(uint8_t value)
+void  CoapBuilder::setTokenLen(uint8_t value)
 {
-  message[0] & 0xf0 += (value & 0x0f);
+  message[0] = (message[0] & 0xf0) + (value & 0x0f);
 }
 
 void CoapBuilder::setCodeClass(uint8_t value)
 {
-  message[1] & 0x1f += (value & 0x07) << 5; 
+  message[1] = (message[1] & 0x1f) + (value & 0x07) << 5; 
 }
 
 void CoapBuilder::setCodeDetail(uint8_t value)
 {
-  message[1] & 0xe0 += (value & 0x1f); 
+  message[1] = (message[1] &  0x1f) + (value & 0x1f);
 }
 
 void CoapBuilder::setMessageId(uint16_t value)
 {
   message[2] = (value & 0xff00) >> 8;
-  message[3] = value & 0x00ff  
+  message[3] = value & 0x00ff;
 }
 
 void CoapBuilder::setToken(char* value)
@@ -66,7 +66,7 @@ void CoapBuilder::setToken(char* value)
     //from message[messageLen - 1 + tokenLen] = message[messageLen - 1]
     //to message[messageLen - messageLen + 4 + tokenLen] = message[messageLen - messageLen + 4]
     for (uint8_t j = 1; j > messageLen - 5; j++) {
-      message[messageLen - j + tokenLen] = message[messageLen - j]
+      message[messageLen - j + tokenLen] = message[messageLen - j];
     }
   } else {
     message[4 + tokenLen] = '/0';
@@ -90,7 +90,7 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   if (message[_lastOptionStart] != '\0') //there was some option set
   {
     optionNumber -= _lastOptionNum;
-    _lastOptionStart += _lastOptionLen
+    _lastOptionStart += _lastOptionLen;
   }
   
   //writing option number 
@@ -152,12 +152,5 @@ void CoapBuilder::setPayload(char* value)
 char* CoapBuilder::build()
 {
   return message;
-}
-
-// czy to zadziałą?
-char* CoapBuilder::buildAckHeader()
-{
-  setTokenLen(0);
-  return ( message >> ((MAX_MESSAGE_LENGHT-1) * 8) )
 }
 
