@@ -1,7 +1,5 @@
 #include <Resources.h>
-
 #include <CoapParser.h>
-
 #include <CoapBuilder.h>
 
 /*
@@ -26,8 +24,6 @@
 
 #include <Ethernet.h>
 #include <EthernetUdp.h>
-
-
 
 // constant variables neccessary for RF24 wireless connection;
 const uint16_t THIS_NODE_ID = 1;
@@ -120,7 +116,6 @@ void initializeResourceList() {
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
   // TO_DO: trzeba tutaj dorobić pętlę, jeżeli zaczyna sie od /sensor/ to wyslij geta
   sendMessageToThing(GET_TYPE, ( (resources[0].flags & 0x1c) >> 2), 0);
-  sendMessageToThing(GET_TYPE, ( (resources[1].flags & 0x1c) >> 2), 0);
 }
 
 // End:Resources--------------------------------
@@ -409,7 +404,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
           }
           else {
             /* zasób nie może być obserwowany  - pomijamy opcje, wiadomośc zwrotna nie będzie zawierać opcji observe */
-            observeOptionValue = "2";
+            strcpy(observeOptionValue, "2");
           }
         }
         else {
@@ -446,14 +441,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                     sessions[sessionNumber].portNumber = portNumber;
                     sessions[sessionNumber].messageID = ++messageId;
                     strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
-                    sessions[sessionNumber].etagValue = etagOptionValue;
+                    sessions[sessionNumber].etag.savedValue = etagOptionValue;
                     sessions[sessionNumber].details = 0;  // active, put, text
 
                     /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
                     observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->timestamp = (millis() / 1000);
 
                     /* wysyłamy wiadomość 2.03 Valid z opcją Etag, bez payloadu i kończymy wykonywanie funkcji */
-                    sendValidResponse(sessions[sessionNumber]);
+                    sendValidResponse(&sessions[sessionNumber]);
                     return;
                   }
                 }
@@ -484,14 +479,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                               sessions[sessionNumber].portNumber = portNumber;
                               sessions[sessionNumber].messageID = ++messageId;
                               strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
-                              sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
+                              sessions[sessionNumber].etag.savedValue = globalEtags[globalIndex].savedValue;
                               sessions[sessionNumber].details = 0;  // active, put, text
 
                               /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
                               observators[observatorIndex].etagsKnownByTheObservator[etagCounter]->timestamp = (millis() / 1000);
 
                               /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
-                              sendContentResponseWithEtag(sessions[sessionNumber]);
+                              sendContentResponseWithEtag(&sessions[sessionNumber]);
                               return;
                             }
                           }
@@ -517,14 +512,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                             sessions[sessionNumber].portNumber = portNumber;
                             sessions[sessionNumber].messageID = ++messageId;
                             strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
-                            sessions[sessionNumber].etagValue = globalEtags[globalIndex].savedValue;
+                            sessions[sessionNumber].etag.savedValue = globalEtags[globalIndex].savedValue;
                             sessions[sessionNumber].details = 0;  // active, put, text
 
                             /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
                             observators[observatorIndex].etagsKnownByTheObservator[etagCounter]->timestamp = (millis() / 1000);
 
                             /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
-                            sendContentResponseWithEtag(sessions[sessionNumber]);
+                            sendContentResponseWithEtag(&sessions[sessionNumber]);
                             return;
                           }
                         }
@@ -566,14 +561,14 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                         sessions[sessionNumber].portNumber = portNumber;
                         sessions[sessionNumber].messageID = ++messageId;
                         strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
-                        sessions[sessionNumber].etagValue = etagOptionValue;
+                        sessions[sessionNumber].etag.savedValue = etagOptionValue;
                         sessions[sessionNumber].details = 0;  // active, put, text
 
                         /* aktualizujemy wartość stempla czasowego danego etaga (liczony w sekundach)*/
-                        observators[observatorIndex].etagsKnownByTheObservator[etagIndex].timestamp = (millis() / 1000);
+                        observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->timestamp = (millis() / 1000);
 
                         /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
-                        sendContentResponseWithEtag(sessions[sessionNumber]);
+                        sendContentResponseWithEtag(&sessions[sessionNumber]);
                         return;
                       }
                     }
@@ -696,21 +691,18 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
             /* wiadomośc typu rst */
 
             /* szukamy obserwatora w sesji*/
-            for (int observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
-              if ( sessions[sessionNumber].resource.observators[observatorIndex].details < 128 ) {
-                /* dany wpis jest oznaczony jako aktywny */
-                if ( sessions[sessionNumber].resource.observators[observatorIndex].ipAddress == ip ) {
-                  if ( sessions[sessionNumber].resource.observators[observatorIndex].port == portNumber ) {
-                    if ( sessions[sessionNumber].resource.observators[observatorIndex].token == sessions[sessionNumber].token ) {
-                      /* znaleźliśmy obserwatora na liście obserwatorów */
+            for ( int observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
+              if ( observators[observatorIndex].ipAddress == ip ) {
+                if ( observators[observatorIndex].portNumber == portNumber ) {
+                  if ( observators[observatorIndex].token == sessions[sessionNumber].token ) {
+                    /* znaleźliśmy na liście obserwatorów klienta, który wysłał RST */
 
-                      /* usuwamy klienta z listy obserwatorów */
-                      sessions[sessionNumber].resource.observators[observatorIndex].details = (sessions[sessionNumber].resource.observators[observatorIndex].details | (1 << 7))
+                     /* usuwamy klienta z listy obserwatorów */
+                     observators[observatorIndex].details = (observators[observatorIndex].details | (1 << 7));
 
-                          /* zmień status sesji na wolny */
-                          sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
-                      return;
-                    }
+                     /* zmień status sesji na wolny */
+                     sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+                     return;
                   }
                 }
               }
@@ -767,6 +759,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
             strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
+            sessions[sessionNumber].messageID = parser.parseMessageId(message);
             sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
             sessions[sessionNumber].details = B00100000;  // active, put, text
 
@@ -805,7 +798,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
             // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
             if ( parser.parseType(message) == TYPE_CON ) {
-              sendAckResponse(sessions[sessionNumber], message);
+              sendEmptyAckResponse(&sessions[sessionNumber]);
             }
 
             // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
@@ -834,7 +827,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej kod błedu oraz payload diagnostyczny.
     -jesli żądanie typu CON - odpowiedz typu ACK
     -jesli żądanie typu NON - odpowiedz typu NON
-    -jesli w żadaniu jest token to go przepisujemy
+    -jesli w żądaniu jest token to go przepisujemy
 */
 void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_t errorType, char * errorMessage) {
   builder.init();
@@ -857,19 +850,20 @@ void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania.
+    (metoda wywoływana w momencie otrzymania wiadomości typu CON)
     - pusta odpowiedź zawiera jedynie nagłówek 4bajtowy;
     - TYPE = TYPE_ACK;
     - TLK = 0 -> brak tokena
     - CODE = 0.00 (CLASS_REQ + DETAIL_EMPTY)
     - MessageID = MessageID z wiadomości;
 */
-void sendEmptyAckResponse(Session * session, char* message) {
+void sendEmptyAckResponse(Session * session) {
   byte response[4];
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_ACK);
   builder.setCodeClass(CLASS_REQ);
   builder.setCodeDetail(DETAIL_EMPTY);
-  builder.setMessageId(parser.parseMessageId(message));
+  builder.setMessageId(session->messageID);
 
   strcpy(response, builder.build());
   sendEthernetMessage(response, session->ipAddress, session->portNumber);
@@ -882,8 +876,11 @@ void sendPiggybackAckResponse(IPAddress ip, uint16_t portNumber, char* message, 
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta związanej z żądaniem PUT.
+    - wersja: DEFAULT_SERVER_VERSION;
+    - typ: NON
+    - kod wiadomości: 2.04 suc
 */
-void sendPutResponse(Session * session) {
+void sendPutResponse(Session* session) {
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
@@ -902,7 +899,12 @@ void sendPutResponse(Session * session) {
   // zmieniamy sesję z aktywnej na nieaktywną
   session->details = ((session->details ^ 0x80));
 }
-
+/**
+ * 
+ */
+void sendAckResponse(Session* session){
+  
+}
 
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
@@ -961,7 +963,7 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
     - parametr sesji oznacza sesję nawiązaną miedzy serwerem a klientem, która dotyczy wiadomości typu CON;
       (sesja przestanie być aktywna w momencie otrzymania potwierdzenia ACK z tym samym messageId);
 */
-void sendContentResponseWithEtag(Session session) {
+void sendContentResponseWithEtag(Session* session) {
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_CON);
@@ -970,20 +972,20 @@ void sendContentResponseWithEtag(Session session) {
   builder.setCodeClass(CLASS_SUC);
   builder.setCodeDetail(5);
 
-  builder.setToken(session.token);
-  builder.setMessageId(session.messageID);
-  builder.setOption(ETAG, session.etag.etagId);
+  builder.setToken(session->token);
+  builder.setMessageId(session->messageID);
+  builder.setOption(ETAG, session->etag.etagId);
 
   builder.setOption(OBSERVE, ++observeCounter);
 
   //TODO zalezc
-  builder.setPayload(session.etag.savedValue);
+  builder.setPayload(session->etag.savedValue);
 
   /* stwórz wiadomość zwrotną */
   response = builder.build();
 
   /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(response, session.ipAddress, session.portNumber);
+  sendEthernetMessage(response, session->ipAddress, session->portNumber);
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta z kodem 2.03 VALID, opcją Etag, Observe oraz bez payloadu.
@@ -1002,7 +1004,7 @@ void sendContentResponseWithEtag(Session session) {
     - parametr sesji oznacza sesję nawiązaną miedzy serwerem a klientem, która dotyczy wiadomości typu CON;
       (sesja przestanie być aktywna w momencie otrzymania potwierdzenia ACK z tym samym messageId);
 */
-void sendValidResponse(Session session) {
+void sendValidResponse(Session* session) {
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_CON);
@@ -1011,18 +1013,18 @@ void sendValidResponse(Session session) {
   builder.setCodeClass(CLASS_SUC);
   builder.setCodeDetail(3);
 
-  builder.setToken(session.token);
+  builder.setToken(session->token);
 
-  builder.setMessageId(session.messageID);
+  builder.setMessageId(session->messageID);
 
-  builder.setOption(ETAG, session.etag.etagId);
+  builder.setOption(ETAG, session->etag.etagId);
   builder.setOption(OBSERVE, ++observeCounter);
 
   /* stwórz wiadomość zwrotną */
   response = builder.build();
 
   /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(response, session.ipAddress, session.portNumber);
+  sendEthernetMessage(response, session->ipAddress, session->portNumber);
 }
 
 // END:CoAP_Methodes-----------------------------
