@@ -314,9 +314,11 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
   /* odczytujemy wartość URI-PATH */
   strcpy(uriPath, parser.fieldValue);
+  while(optionNumber = parser.getNextOption(message) == URI_PATH) {
+    strcat(uriPath, parser.fieldValue);
+  }
 
   /* przeglądamy dalsze opcje wiadomości w celu odnalezienia opcji ACCEPT */
-  optionNumber = parser.getNextOption(message);
   while ( optionNumber != NO_OPTION ) {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
