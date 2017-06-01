@@ -300,7 +300,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   int etagValueNumber = 0;
   uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
   char observeOptionValue[3] = {'0', '0', '2'}; // klient może wysłac jedynie 0 lub 1
-  char uriPath[255] = "";
+  char uriPath[150] = "";
   uint16_t acceptOptionValue = 0;
 
   /*---wczytywanie opcji-----------------------------------------------------------------------------*/
