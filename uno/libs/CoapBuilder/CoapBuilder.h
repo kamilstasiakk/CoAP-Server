@@ -11,7 +11,7 @@
 class CoapBuilder
 {
   public:
-    static const int MAX_MESSAGE_LENGHT = 200;
+    static const int MAX_MESSAGE_LENGHT = 100;
     char message[MAX_MESSAGE_LENGHT];
     
     CoapBuilder();
@@ -38,6 +38,8 @@ class CoapBuilder
     void setOption(uint32_t optionNumber, char* value);
     //sets Payload
     void setPayload(char* value);
+	//appends to payload
+	void appendPayload(char* value);
     char* build(); 
     char* buildAckHeader();
 

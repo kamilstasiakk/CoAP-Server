@@ -149,6 +149,15 @@ void CoapBuilder::setPayload(char* value)
   message[messageLen + i] = '\0';
 }
 
+void CoapBuilder::appendPayload(char* value) {
+	uint8_t i;
+  uint8_t messageLen = strlen(message);
+  for (i = 0; i < strlen(value); i++) {
+    message[messageLen + i] = value[i];
+  }
+  message[messageLen + i] = '\0';
+}
+
 char* CoapBuilder::build()
 {
   return message;

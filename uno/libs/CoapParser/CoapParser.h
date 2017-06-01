@@ -14,7 +14,7 @@
 class CoapParser
 {
   public:
-	static const int FIELD_MAX_LENGHT = 150;
+	static const int FIELD_MAX_LENGHT = 15;
     char fieldValue[FIELD_MAX_LENGHT];
 	
     typedef struct record Record;

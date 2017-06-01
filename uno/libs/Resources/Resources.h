@@ -10,29 +10,29 @@
 */
 
 
-const int RESOURCES_COUNT = 5;
-const int MAX_SESSIONS_COUNT = 5;
-const int MAX_ETAG_COUNT = 10;
+const int RESOURCES_COUNT = 6;
+const int MAX_SESSIONS_COUNT = 2;
+const int MAX_ETAG_COUNT = 3;
 const int MAX_ETAG_CLIENT_COUNT = 3;
 //uint8_t MAX_OBSERVATORS_COUNT = 5;
 
 // error codes
-uint16_t BAD_REQUEST = 400;
-uint16_t NOT_FOUND = 404;
-uint16_t METHOD_NOT_ALLOWED = 402;
-uint16_t NOT_ACCEPTABLE = 406;
-uint16_t INTERNAL_SERVER_ERROR = 500;
+const uint16_t BAD_REQUEST = 400;
+const uint16_t NOT_FOUND = 404;
+const uint16_t METHOD_NOT_ALLOWED = 402;
+const uint16_t NOT_ACCEPTABLE = 406;
+const uint16_t INTERNAL_SERVER_ERROR = 500;
 
-uint16_t ETAG = 4;
-uint16_t URI_PATH = 11;
-uint16_t CONTENT_FORMAT = 12;
-uint16_t ACCEPT = 17;
-uint16_t OBSERVE = 6;
-uint16_t NO_OPTION = 0;
+const uint16_t ETAG = 4;
+const uint16_t URI_PATH = 11;
+const uint16_t CONTENT_FORMAT = 12;
+const uint16_t ACCEPT = 17;
+const uint16_t OBSERVE = 6;
+const uint16_t NO_OPTION = 0;
 
-uint8_t PLAIN_TEXT = 0;
-uint8_t XML = 41;
-uint8_t JSON = 50;
+const uint8_t PLAIN_TEXT = 0;
+const uint8_t XML = 41;
+const uint8_t JSON = 50;
 
 // TYPE (T) fields:
 const uint8_t TYPE_CON = 0;
