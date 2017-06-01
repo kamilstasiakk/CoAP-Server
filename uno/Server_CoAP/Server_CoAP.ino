@@ -42,7 +42,7 @@ RF24Network network(radio);
 // variable connected with wired connection
 EthernetUDP Udp;
 byte mac[] = {00, 0xaa, 0xbb, 0xcc, 0xde, 0xf3};
-IPAddress ip = (192, 168, 1, 1);
+IPAddress ip(192, 168, 1, 1);
 short localPort = 1237;
 const uint8_t MAX_BUFFER = 100; //do zastanowienia
 char ethMessage[MAX_BUFFER];
@@ -61,17 +61,23 @@ CoapBuilder builder = CoapBuilder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
 void setup() {
+ 
   SPI.begin();
+  Serial.begin(9600);
   initializeRF24Communication();
   initializeEthernetCommunication();
 
   initializeResourceList();
+  Serial.println(".");
 }
 
 void loop() {
   // checking the network object regularly;
   network.update();
   receiveRF24Message();
+
+  receiveEthernetMessage();
+  
 }
 
 
@@ -79,43 +85,51 @@ void loop() {
 // Resources:Methodes---------------------------
 void initializeResourceList() {
   // lampka
-  resources[0].uri = "/sensor/lamp";
-  resources[0].resourceType = "Lamp";
-  resources[0].interfaceDescription = "state";
+  resources[1].uri = "sensor/lamp";
+  resources[1].resourceType = "Lamp";
+  resources[1].interfaceDescription = "state";
   strcpy(resources[0].textValue, "0"); //OFF
-  resources[0].flags = B00000010;
+  resources[1].flags = B00000010;
 
   // przycisk
-  resources[1].uri = "/sensor/button";
-  resources[1].resourceType = "Button";
-  resources[1].interfaceDescription = "state";
+  resources[2].uri = "sensor/button";
+  resources[2].resourceType = "Button";
+  resources[2].interfaceDescription = "state";
   strcpy(resources[1].textValue, "0");
-  resources[1].flags = B00000101;
+  resources[2].flags = B00000101;
 
   // metryka PacketLossRate
-  resources[2].uri = "/metric/PLR";
-  resources[2].resourceType = "PacketLossRate";
-  resources[2].interfaceDescription = "value";
-  strcpy(resources[2].textValue, "0"); //OFF
-  resources[2].flags = B00000000;
-
-  // metryka ByteLossRate
-  resources[3].uri = "/metric/BLR";
-  resources[3].resourceType = "ByteLossRate";
+  resources[3].uri = "metric/PLR";
+  resources[3].resourceType = "PacketLossRate";
   resources[3].interfaceDescription = "value";
-  strcpy(resources[3].textValue, "0");
+  strcpy(resources[2].textValue, "0"); //OFF
   resources[3].flags = B00000000;
 
-  // metryka MeanAckDelay
-  resources[4].uri = "/metric/MAD";
-  resources[4].resourceType = "MeanACKDelay";
+  // metryka ByteLossRate
+  resources[4].uri = "metric/BLR";
+  resources[4].resourceType = "ByteLossRate";
   resources[4].interfaceDescription = "value";
   strcpy(resources[4].textValue, "0");
   resources[4].flags = B00000000;
 
+  // metryka MeanAckDelay
+  resources[5].uri = "metric/MAD";
+  resources[5].resourceType = "MeanACKDelay";
+  resources[5].interfaceDescription = "value";
+  strcpy(resources[5].textValue, "0");
+  resources[5].flags = B00000000;
+
+  // well-known.core
+  resources[0].uri = ".well-known/core";
+  resources[0].resourceType = "";
+  resources[0].interfaceDescription = "";
+  Resource resources[RESOURCES_COUNT];
+  strcpy(resources[5].textValue, "0");
+  resources[0].flags = B00000000;
+  
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
   // TO_DO: trzeba tutaj dorobić pętlę, jeżeli zaczyna sie od /sensor/ to wyslij geta
-  sendMessageToThing(GET_TYPE, ( (resources[0].flags & 0x1c) >> 2), 0);
+  sendMessageToThing(GET_TYPE, ( (resources[1].flags & 0x1c) >> 2), 0);
 }
 
 // End:Resources--------------------------------
@@ -149,6 +163,7 @@ void receiveRF24Message() {
 void sendRF24Message(byte message) {
   RF24NetworkHeader header;
   network.write(header, &message, sizeof(message));
+  Serial.println("-.-");
 }
 // END:RF23_Methodes----------------------------
 
@@ -166,10 +181,11 @@ void initializeEthernetCommunication() {
     - jeżeli pakiet ma mniej niż 4 bajty (minimalną wartośc nagłówka) to odrzucamy go;
     - jeżeli pakiet ma przynajmniej 4 bajty, zostaje poddany dalszej analizie;
 */
-void receiveEthernetMessage() {
+void receiveEthernetMessage() { 
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if (packetSize) {
     if (packetSize >= 4) {
+      Serial.println("receive");
       Udp.read(ethMessage, MAX_BUFFER);
       getCoapClienMessage(ethMessage, Udp.remoteIP(), Udp.remotePort());
     }
@@ -186,6 +202,9 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
   Udp.beginPacket(ip, port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
+
+  Serial.println("send: ");
+  Serial.println(message);
 
   //jeżeli liczba danych przyjętych do wysłania przez warstwę niższą jest mniejsza niż rozmiar wiadomości to?
   if ( r < messageSize ) {
@@ -276,12 +295,13 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       -
 */
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
+  Serial.println("get");
   char etagOptionValues[ETAG_MAX_OPTIONS_COUNT][8];
   int etagValueNumber = 0;
   uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
   char observeOptionValue[3] = {'0', '0', '2'}; // klient może wysłac jedynie 0 lub 1
-  char uriPath[255] = "";
-  char acceptOptionValue[2] = "";
+  char uriPath[150] = "";
+  uint16_t acceptOptionValue = 0;
 
   /*---wczytywanie opcji-----------------------------------------------------------------------------*/
   uint8_t optionNumber = parser.getFirstOption(message);
@@ -322,7 +342,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   while ( optionNumber != NO_OPTION ) {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
-      strcpy(acceptOptionValue, parser.fieldValue);
+      acceptOptionValue = parser.fieldValue;
       break;
     }
   }
@@ -334,15 +354,39 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   /*----analiza wiadomości---- */
   /* szukamy wskazanego zasobu na serwerze */
   for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
-    if (strcmp(resources[resourceNumber].uri, uriPath) == 0) {
-      /* wskazany zasób znajduje się na serwerze */
+    /* sprawdzamy, czy wskazanym zasobem jest well.known/core*/
+    if ( strcmp(resources[0].uri, uriPath ) == 0 ) {
+      /* tworzymy specjalny payload zawierający odpowiedz, w ktorej zawarte sa opisy zasobow */
+      char payload[256];
+      strcat(payload, "</.well-known/core>,");
+      for (uint8_t index = 1; index < RESOURCES_COUNT; index++ ) {
+        strcat(payload, "</");
+        strcat(payload, resources[index].uri);
+        strcat(payload, ">;");
 
+        strcat(payload, "rt=\"");
+        strcat(payload, resources[index].resourceType);
+        strcat(payload, "\";");
+
+        strcat(payload, "title=\"");
+        strcat(payload, resources[index].interfaceDescription);
+        strcat(payload, "\",");
+      }
+      strcat(payload, "</shutdown>");
+
+      /* wysyłamy wiadomosc zwrotna z ladunkiem */
+      sendContentResponse(ip, portNumber, "0", payload, false);
+    }
+
+    if ( strcmp(resources[resourceNumber].uri, uriPath) == 0) {
+      /* wskazany zasób znajduje się na serwerze */
+      
       /* zmienne mówiące o pozycji w listach */
       uint8_t observatorIndex = MAX_OBSERVATORS_COUNT + 1;
       uint8_t etagIndex = MAX_ETAG_COUNT + 1;
 
       /*-----analiza zawartości opcji OBSERVE-----------------------------------------------------------------------------*/
-      if ( observeOptionValue != 2 ) { // DLACZEGO POROWNUJEMY TO Z 2???
+      if ( observeOptionValue != 2 ) {
         /* opcja OBSERVE wystąpiła w żądaniu */
         if ( observeOptionValue == "0" || observeOptionValue == "1") {
           /* 0 - jeżeli dany klient nie znajduje się na liście obserwatorów to go dodajemy */
@@ -418,7 +462,8 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       }
       /*-----koniec analizy wartości observe----------------------------------------------------------------------------- */
 
-
+      char value;
+        
       /*-----analiza wartości parametrów ETAG----------------------------------------------------------------------------- */
       if (  etagValueNumber != 0 ) {
         /* sprawdzamy, czy dany klient jest zapisany na liście obserwatorów */
@@ -524,6 +569,8 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
                               /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
                               sendContentResponseWithEtag(&sessions[sessionNumber]);
+                              
+                              /* zapisz wartośc sesji - potrzebne do pozniejszego wyslania wiadomosci */
                               return;
                             }
                           }
@@ -602,14 +649,31 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       }
       /*-----koniec analizy wartości parametrów ETAG----------------------------------------------------------------------------- */
 
-      /* brak opcji Etag */
+      /*-------analiza wiadomości z opcją acccept------------------------------------------------------------------------------*/
+      if ( acceptOptionValue == 0 ) {
+        switch (acceptOptionValue) {
+          case 0:
+            /* plain-text */
+            break;
+          case 50:
+            /* j-son */
+            // DOROBIĆ
+            break;
+          default:
+            /* wyślij odpowiedz z kodem błedu 4.06 Not acceptable */
+            sendErrorResponse(ip, portNumber, ethMessage, NOT_ACCEPTABLE, "UNKNOWN ACCEPT VALUE");
+            break;
+        }
+        
+        if ( observeOptionValue != 2 ) {
+          /* analiza wiadomości z opcjami accept + observe + URI_PATH */
+        }
 
-
-      /*-----analiza wiadomości z opcjami accept + observe + URI_PATH----------------------------------------------------------*/
-      if ( observeOptionValue != 2  &&  acceptOptionValue == 0 ) {
-
+        /* analiza wiadomości z opcją accept + URI_PATH */
       }
-      /*-----koniec analizy wiadomości z opcjami accept + observe + URI_PATH-------------------------------------------------- */
+
+
+      /*-------koniec analizy wiadomości z opcją acccept-----------------------------------------------------------------------*/
 
 
       /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
@@ -620,18 +684,12 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       }
       /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
 
-
-      /*-----analiza wiadomości z opcją accept + URI_PATH----------------------------------------------------------*/
-      if ( acceptOptionValue == 0 ) {
-
-      }
-      /*-----koniec analizy wiadomości o opcją accept + URI_PATH------------------------------------------------- */
-
-
       /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
       /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
       sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), resources[resourceNumber].textValue, false);
       /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
+
+
     }  //if (strcmp(resources[resourceNumber].uri, uriPath) == 0)
   } //for loop (przeszukiwanie zasobu)
 
