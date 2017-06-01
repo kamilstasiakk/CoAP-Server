@@ -47,6 +47,7 @@ short localPort = 1237;
 const uint8_t MAX_BUFFER = 100; //do zastanowienia
 char ethMessage[MAX_BUFFER];
 
+
 // CoAP variables:
 Resource resources[RESOURCES_COUNT];
 Session sessions[MAX_SESSIONS_COUNT];
@@ -250,7 +251,7 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       break;
     case DETAIL_PUT:
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
-        receivePutRequest(message, ip, port);
+//        receivePutRequest(message, ip, port);
         return;
       }
       break;
@@ -792,98 +793,98 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
     -TO_DO: obsługa XML i JSONa
 */
-void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
-  uint8_t optionNumber = parser.getFirstOption(message);
-  if (optionNumber != URI_PATH) {
-    if (optionNumber > URI_PATH) {
-      sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
-      return;
-    } else {
-      while (optionNumber != URI_PATH)  {
-        //nie ma uri! BLAD
-        if (optionNumber > URI_PATH || optionNumber == NO_OPTION) {
-          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
-          return;
-        }
-        optionNumber = parser.getNextOption(message);
-      } // end of while loop
-    }
-  } // end of if (firstOption != URI_PATH)
-
-  //sparsowaliśmy uri - szukamy zasobu na serwerze
-  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
-    if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0) {
-      // sprawdzamy, czy na danym zasobie można zmienić stan
-      if ((resources[resourceNumber].flags & 0x02) == 2) {
-        // szukamy wolnej sesji
-        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-          if ((sessions[sessionNumber].details & 0x80) == 128) {
-            // sesja wolna
-            sessions[sessionNumber].ipAddress = ip;
-            sessions[sessionNumber].portNumber = portNumber;
-            strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
-            sessions[sessionNumber].messageID = parser.parseMessageId(message);
-            sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
-            sessions[sessionNumber].details = B00100000;  // active, put, text
-
-            // szukamy opcji ContentFormat
-            optionNumber = parser.getNextOption(message);
-            while (optionNumber != CONTENT_FORMAT)  {
-              //nie ma content-format! BLAD
-              if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
-                sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
-                return;
-              }
-              optionNumber = parser.getNextOption(message);
-            }
-
-            // sprawdzamy zawartość opcji ContentFormat
-            // zerowanie bitów content_type
-            sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xe0);
-            if (strlen(parser.fieldValue) > 0) {
-              if (parser.fieldValue[0] == PLAIN_TEXT) {
-                sessions[sessionNumber].details = (sessions[sessionNumber].details);
-              }
-              else if (parser.fieldValue[0] == XML) {
-                sessions[sessionNumber].details = (sessions[sessionNumber].details | 41);
-              }
-              else if (parser.fieldValue[0] == JSON) {
-                sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
-              }
-              else {
-                sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
-                return;
-              }
-            } else {
-              sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
-              return;
-            }
-
-            // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
-            if ( parser.parseType(message) == TYPE_CON ) {
-              sendEmptyAckResponse(&sessions[sessionNumber]);
-            }
-
-            // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message));
-            return;
-          } // end of (sessions[sessionNumber].contentFormat > 127)
-
-          // brak wolnej sesji - bład INTERNAL_SERVER_ERROR
-          sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "Too much requests");
-          return;
-        } // end of for loop (przeszukiwanie sesji)
-      } // end of if((resources[resourceNumber].flags & 0x02) == 2
-
-      // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
-      sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Operation not permitted");
-
-    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
-  } // end of for loop (przeszukiwanie zasobów)
-
-  // błędne uri - brak takiego zasobu na serwerze
-  sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "No a such resource");
-}
+//void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
+//  uint8_t optionNumber = parser.getFirstOption(message);
+//  if (optionNumber != URI_PATH) {
+//    if (optionNumber > URI_PATH) {
+//      sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
+//      return;
+//    } else {
+//      while (optionNumber != URI_PATH)  {
+//        //nie ma uri! BLAD
+//        if (optionNumber > URI_PATH || optionNumber == NO_OPTION) {
+//          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
+//          return;
+//        }
+//        optionNumber = parser.getNextOption(message);
+//      } // end of while loop
+//    }
+//  } // end of if (firstOption != URI_PATH)
+//
+//  //sparsowaliśmy uri - szukamy zasobu na serwerze
+//  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
+//    if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0) {
+//      // sprawdzamy, czy na danym zasobie można zmienić stan
+//      if ((resources[resourceNumber].flags & 0x02) == 2) {
+//        // szukamy wolnej sesji
+//        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+//          if ((sessions[sessionNumber].details & 0x80) == 128) {
+//            // sesja wolna
+//            sessions[sessionNumber].ipAddress = ip;
+//            sessions[sessionNumber].portNumber = portNumber;
+//            strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
+//            sessions[sessionNumber].messageID = parser.parseMessageId(message);
+//            sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
+//            sessions[sessionNumber].details = B00100000;  // active, put, text
+//
+//            // szukamy opcji ContentFormat
+//            optionNumber = parser.getNextOption(message);
+//            while (optionNumber != CONTENT_FORMAT)  {
+//              //nie ma content-format! BLAD
+//              if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
+//                sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
+//                return;
+//              }
+//              optionNumber = parser.getNextOption(message);
+//            }
+//
+//            // sprawdzamy zawartość opcji ContentFormat
+//            // zerowanie bitów content_type
+//            sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xe0);
+//            if (strlen(parser.fieldValue) > 0) {
+//              if (parser.fieldValue[0] == PLAIN_TEXT) {
+//                sessions[sessionNumber].details = (sessions[sessionNumber].details);
+//              }
+//              else if (parser.fieldValue[0] == XML) {
+//                sessions[sessionNumber].details = (sessions[sessionNumber].details | 41);
+//              }
+//              else if (parser.fieldValue[0] == JSON) {
+//                sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
+//              }
+//              else {
+//                sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
+//                return;
+//              }
+//            } else {
+//              sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
+//              return;
+//            }
+//
+//            // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
+//            if ( parser.parseType(message) == TYPE_CON ) {
+//              sendEmptyAckResponse(&sessions[sessionNumber]);
+//            }
+//
+//            // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
+//            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message));
+//            return;
+//          } // end of (sessions[sessionNumber].contentFormat > 127)
+//
+//          // brak wolnej sesji - bład INTERNAL_SERVER_ERROR
+//          sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "Too much requests");
+//          return;
+//        } // end of for loop (przeszukiwanie sesji)
+//      } // end of if((resources[resourceNumber].flags & 0x02) == 2
+//
+//      // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
+//      sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Operation not permitted");
+//
+//    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
+//  } // end of for loop (przeszukiwanie zasobów)
+//
+//  // błędne uri - brak takiego zasobu na serwerze
+//  sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "No a such resource");
+//}
 
 
 /*
