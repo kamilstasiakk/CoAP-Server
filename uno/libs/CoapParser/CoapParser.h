@@ -14,12 +14,9 @@
 class CoapParser
 {
   public:
-    static const int FIELD_MAX_LENGHT = 200;
-    static const int UDP_BUFFER_SIZE = 8192;
-    char packetBuffer[UDP_BUFFER_SIZE];
+	static const int FIELD_MAX_LENGHT = 150;
     char fieldValue[FIELD_MAX_LENGHT];
-
-
+	
     typedef struct record Record;
 
     CoapParser();
