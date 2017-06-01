@@ -147,8 +147,9 @@ void CoapBuilder::setPayload(char* value)
     message[messageLen + i] = value[i];
   }
   message[messageLen + i] = '\0';
+  _payloadLen = strlen(value);
 }
-
+//append string to payload
 void CoapBuilder::appendPayload(char* value) {
 	uint8_t i;
   uint8_t messageLen = strlen(message);
@@ -156,6 +157,21 @@ void CoapBuilder::appendPayload(char* value) {
     message[messageLen + i] = value[i];
   }
   message[messageLen + i] = '\0';
+  _payloadLen += strlen(value);
+}
+// remove Payload from message (payload tag is removed too)
+void CoapBuilder::flushPayload() {
+	_payloadLen = 0;
+  for (i = 0; i < strlen(message); i++) {
+    if (message[i] == 255) {
+		message[i] = '\0';
+		return;
+  }
+}
+
+// remove Payload from message (payload tag is removed too)
+uint8_t CoapBuilder::getPayloadLen() {
+	return _payloadLen;
 }
 
 char* CoapBuilder::build()

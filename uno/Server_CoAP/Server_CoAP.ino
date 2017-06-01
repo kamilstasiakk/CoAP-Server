@@ -372,6 +372,8 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
         strcat(payload, "title=\"");
         strcat(payload, resources[index].interfaceDescription);
         strcat(payload, "\",");
+
+        //dopisac pole sz i obs ( observe)
       }
       strcat(payload, "</shutdown>");
 
