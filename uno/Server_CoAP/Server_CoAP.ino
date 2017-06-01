@@ -171,7 +171,7 @@ void receiveEthernetMessage() {
   if (packetSize) {
     if (packetSize >= 4) {
       Udp.read(ethMessage, MAX_BUFFER);
-      (ethMessage, Udp.remoteIP(), Udp.remotePort());
+      getCoapClienMessage(ethMessage, Udp.remoteIP(), Udp.remotePort());
     }
   }
 }
