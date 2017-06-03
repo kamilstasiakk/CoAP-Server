@@ -73,7 +73,7 @@ struct Resource {
   char* uri;
   char* resourceType;
   char* interfaceDescription;
-  unsigned long Value;  // jedna z możliwych reprezentacji
+  unsigned long value;  // jedna z możliwych reprezentacji
   uint16_t size;
   /*
      7 6 5 | 4 3 2 |   1  |    0

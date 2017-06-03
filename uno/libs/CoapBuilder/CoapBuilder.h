@@ -40,7 +40,7 @@ class CoapBuilder
     void setPayload(char* value);
 	//appends to payload
 	void appendPayload(char* value);
-	void flushPayload(char* value);
+	void flushPayload();
 	uint8_t getPayloadLen();
     char* build(); 
     char* buildAckHeader();

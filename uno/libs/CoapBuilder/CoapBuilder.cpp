@@ -27,12 +27,14 @@ void CoapBuilder::init()
 
 void CoapBuilder::setVersion(uint8_t value)
 {
-  message[0] = (message[0] & 0x3f) + (value & 0x03) << 6;
+ 
+  message[0] = (message[0] & 0x3f) + ((value & 0x03) << 6);
 }
 
 void CoapBuilder::setType(uint8_t value)
 {
-  message[0] = (message[0] & 0xaf) + (value & 0x03) << 4;
+
+  message[0] = (message[0] & 0xcf) + ((value & 0x03) << 4);
 }
 
 void  CoapBuilder::setTokenLen(uint8_t value)
@@ -42,7 +44,7 @@ void  CoapBuilder::setTokenLen(uint8_t value)
 
 void CoapBuilder::setCodeClass(uint8_t value)
 {
-  message[1] = (message[1] & 0x1f) + (value & 0x07) << 5; 
+  message[1] = (message[1] & 0x1f) + ((value & 0x07) << 5); 
 }
 
 void CoapBuilder::setCodeDetail(uint8_t value)
@@ -162,13 +164,14 @@ void CoapBuilder::appendPayload(char* value) {
 // remove Payload from message (payload tag is removed too)
 void CoapBuilder::flushPayload() {
 	_payloadLen = 0;
+		uint8_t i;
   for (i = 0; i < strlen(message); i++) {
     if (message[i] == 255) {
 		message[i] = '\0';
 		return;
   }
 }
-
+}
 // remove Payload from message (payload tag is removed too)
 uint8_t CoapBuilder::getPayloadLen() {
 	return _payloadLen;

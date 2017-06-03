@@ -39,11 +39,11 @@ class CoapParser
     // zwraca numer pierwszej opcji, jej wartość zapisana jest w polu fieldValue, 
     //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    uint32_t getFirstOption(char* message);
+    uint8_t getFirstOption(char* message);
     // zwraca numer kolejnej opcji, jej wartość zapisana jest w polu fieldValue, 
     //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    uint32_t getNextOption(char* message) ;
+    uint8_t getNextOption(char* message) ;
     //zwraca długość pola danych
     uint8_t getPayloadSize(char* message);
     // zwraca wskaznik na tablice, w ktorej zapisany jest payload, 
@@ -54,6 +54,7 @@ class CoapParser
   private:
     uint8_t _currentOptionStart;
     uint8_t _payloadStart;
+    uint8_t _lastOptionType;
     uint32_t getOptionLen(char* message, uint8_t startBase, uint8_t startExtended);
     uint8_t computeOptLenOffset(uint32_t optionLen);
 };
