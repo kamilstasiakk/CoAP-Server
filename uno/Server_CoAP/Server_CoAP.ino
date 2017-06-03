@@ -701,7 +701,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
       if ( observeOptionValue != 2 ) {
         /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
-        sendContentResponse(ip, portNumber, observators[observatorIndex].token, getCharValueFromResourceValue(resources[resourceNumber].value, 0), true);
+        //sendContentResponse(ip, portNumber, observators[observatorIndex].token, getCharValueFromResourceValue(resources[resourceNumber].value, 0), true);
         return;
       }
       /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
@@ -711,8 +711,10 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       Serial.println(F("resourceNumber"));
       Serial.println(resourceNumber);
       Serial.println(resources[resourceNumber].value);
-      
-      sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), resources[resourceNumber].value , false);
+
+      char charValue[2];
+      getCharValueFromResourceValue(charValue,resources[resourceNumber].value,0);
+      sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), charValue , false);
       return;
       /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
       
@@ -725,16 +727,15 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 }
 
 
-char* getCharValueFromResourceValue(unsigned long value, uint16_t requestedType){
+void getCharValueFromResourceValue(char* charValue,unsigned long value, uint16_t requestedType){
   switch (requestedType) {
           case 0:
             /* plain-text */
             if (value < 10 ){
-              return value + '0';
+              charValue[0] = value + '0';
+              charValue[1] = '\0';
             }
             else {
-              //poprawic
-              return '0';
             }
             break;
 //          case 50:
