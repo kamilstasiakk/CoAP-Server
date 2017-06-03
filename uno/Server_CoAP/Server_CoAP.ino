@@ -62,7 +62,7 @@ CoapBuilder builder = CoapBuilder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
 void setup() {
- 
+
   SPI.begin();
   Serial.begin(9600);
   initializeRF24Communication();
@@ -78,7 +78,7 @@ void loop() {
   receiveRF24Message();
 
   receiveEthernetMessage();
-  
+
 }
 
 
@@ -127,7 +127,7 @@ void initializeResourceList() {
   Resource resources[RESOURCES_COUNT];
   strcpy(resources[5].textValue, "0");
   resources[0].flags = B00000000;
-  
+
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
   // TO_DO: trzeba tutaj dorobić pętlę, jeżeli zaczyna sie od /sensor/ to wyslij geta
   sendMessageToThing(GET_TYPE, ( (resources[1].flags & 0x1c) >> 2), 0);
@@ -182,7 +182,7 @@ void initializeEthernetCommunication() {
     - jeżeli pakiet ma mniej niż 4 bajty (minimalną wartośc nagłówka) to odrzucamy go;
     - jeżeli pakiet ma przynajmniej 4 bajty, zostaje poddany dalszej analizie;
 */
-void receiveEthernetMessage() { 
+void receiveEthernetMessage() {
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if (packetSize) {
     if (packetSize >= 4) {
@@ -251,7 +251,7 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       break;
     case DETAIL_PUT:
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
-//        receivePutRequest(message, ip, port);
+        //        receivePutRequest(message, ip, port);
         return;
       }
       break;
@@ -303,6 +303,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   char observeOptionValue[3] = {'0', '0', '2'}; // klient może wysłac jedynie 0 lub 1
   char uriPath[150] = "";
   uint16_t acceptOptionValue = 0;
+  uint8_t blockOptionValue = 0;
 
   /*---wczytywanie opcji-----------------------------------------------------------------------------*/
   uint8_t optionNumber = parser.getFirstOption(message);
@@ -335,7 +336,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
   /* odczytujemy wartość URI-PATH */
   strcpy(uriPath, parser.fieldValue);
-  while(optionNumber = parser.getNextOption(message) == URI_PATH) {
+  while ((optionNumber = parser.getNextOption(message)) == URI_PATH) {
     strcat(uriPath, parser.fieldValue);
   }
 
@@ -344,6 +345,11 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
       acceptOptionValue = parser.fieldValue;
+      break;
+    }
+    if ( optionNumber == BLOCK2 ) {
+      /* wystąpiła opcja BLOCK2, zapisz jej zawartość */
+      blockOptionValue = parser.fieldValue[0];
       break;
     }
   }
@@ -357,33 +363,13 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
     /* sprawdzamy, czy wskazanym zasobem jest well.known/core*/
     if ( strcmp(resources[0].uri, uriPath ) == 0 ) {
-      /* tworzymy specjalny payload zawierający odpowiedz, w ktorej zawarte sa opisy zasobow */
-      char payload[256];
-      strcat(payload, "</.well-known/core>,");
-      for (uint8_t index = 1; index < RESOURCES_COUNT; index++ ) {
-        strcat(payload, "</");
-        strcat(payload, resources[index].uri);
-        strcat(payload, ">;");
-
-        strcat(payload, "rt=\"");
-        strcat(payload, resources[index].resourceType);
-        strcat(payload, "\";");
-
-        strcat(payload, "title=\"");
-        strcat(payload, resources[index].interfaceDescription);
-        strcat(payload, "\",");
-
-        //dopisac pole sz i obs ( observe)
-      }
-      strcat(payload, "</shutdown>");
-
       /* wysyłamy wiadomosc zwrotna z ladunkiem */
-      sendContentResponse(ip, portNumber, "0", payload, false);
+      sendWellKnownContentResponse(ip, portNumber, "0", ((blockOptionValue & 0xf0) >> 4), (blockOptionValue & 0x07))
     }
 
     if ( strcmp(resources[resourceNumber].uri, uriPath) == 0) {
       /* wskazany zasób znajduje się na serwerze */
-      
+
       /* zmienne mówiące o pozycji w listach */
       uint8_t observatorIndex = MAX_OBSERVATORS_COUNT + 1;
       uint8_t etagIndex = MAX_ETAG_COUNT + 1;
@@ -466,7 +452,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----koniec analizy wartości observe----------------------------------------------------------------------------- */
 
       char value;
-        
+
       /*-----analiza wartości parametrów ETAG----------------------------------------------------------------------------- */
       if (  etagValueNumber != 0 ) {
         /* sprawdzamy, czy dany klient jest zapisany na liście obserwatorów */
@@ -572,7 +558,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
                               /* wysyłamy wiadomość 2.05 content z opcją observe, z opcją etag oraz z ładunkiem (CON)*/
                               sendContentResponseWithEtag(&sessions[sessionNumber]);
-                              
+
                               /* zapisz wartośc sesji - potrzebne do pozniejszego wyslania wiadomosci */
                               return;
                             }
@@ -667,7 +653,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
             sendErrorResponse(ip, portNumber, ethMessage, NOT_ACCEPTABLE, "UNKNOWN ACCEPT VALUE");
             break;
         }
-        
+
         if ( observeOptionValue != 2 ) {
           /* analiza wiadomości z opcjami accept + observe + URI_PATH */
         }
@@ -1003,8 +989,47 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
   if (addObserveOption) {
     builder.setOption(OBSERVE, ++observeCounter);
   }
+  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
 
   builder.setPayload(payloadValue);
+
+  /* stwórz wiadomość zwrotną */
+  response = builder.build();
+
+  /* wyślij utworzoną wiaodmość zwrotną */
+  sendEthernetMessage(response, ip , portNumber);
+}
+/*
+ * tak jak poprzednia funkcja z następującymi wyjątkami:
+ * nie ma argumentu payload, ponieważ jest on w pewnym sensie stały (well-know-core)
+ */
+void sendWellKnownContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, uint8_t blockNumber, uint8_t blockSize) {
+  char response;
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_NON);
+
+  /* kod wiaodmości 2.05 CONTENT */
+  builder.setCodeClass(CLASS_SUC);
+  builder.setCodeDetail(5);
+
+  builder.setToken(tokenValue);
+  builder.setMessageId(0);
+
+  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
+  /*narazie zakładamy ze bloki beda 64bitowe, wiec blokow w naszym przypadku zawsze bedzie mniej niz 16 ((blockNumber & 0x0f) << 4) 
+   * cztery najstrasze bity okreslaja numer bloku,
+   * 3 najmlodsze okreslaja rozmiar bloku
+   */ 
+  
+  char blockValue = ((blockNumber & 0x0f) << 4) + (blockSize & 0x07);
+  if ((resources[0].size - blockSize * blockNumber) > 0) {
+    // 8 - ustawiamy 4. najmłodszy bit na 1, jeśli jest jeszcze cos do wysłania
+    blockValue += 8;
+  }
+  builder.setOption(BLOCK2, blockValue);
+
+
+  setWellKnownCorePayload(blockNumber, blockSize);
 
   /* stwórz wiadomość zwrotną */
   response = builder.build();
@@ -1093,6 +1118,72 @@ void sendValidResponse(Session* session) {
   sendEthernetMessage(response, session->ipAddress, session->portNumber);
 }
 
+void setWellKnownCorePayload(uint16_t blockNumber, uint8_t blockSize) {
+  //initializacja pola payload (czyszczenie pola, dodanie znacznika)
+  builder.flushPayload();
+  if (blockNumber == 0) {
+    builder.setPayload("</.well-known/core>,");
+  } else {
+    builder.setPayload("");
+  }
+  uint8_t currentBlock = 0;
+  for (uint8_t index = 1; index < RESOURCES_COUNT; index++ ) {
+    uint8_t freeLen = blockSize - 1 - builder.getPayloadLen(); //blockSize -1, bo musimy jeszcze zmiescic znak konca
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "</")) {
+      return;
+    }
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, resources[index].uri)) {
+      return;
+    }
+
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, ">;")) {
+      return;
+    }
+    if ((resources[index].flag & 0x01) == 1 ) {
+      if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "</obs>;")) {
+        return;
+      }
+    }
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "rt=\"")) {
+      return;
+    }
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, resources[index].resourceType)) {
+      return;
+    }
+
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "title=\"")) {
+      return;
+    }
+
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, resources[index].interfaceDescription)) {
+      return;
+    }
+    if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "\",")) {
+      return;
+    }
+  }
+  if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "</shutdown>")) {
+      return;
+    }
+}
+
+//zwraca informacje o tym czy odpowiedni blok został już zapełniony
+bool setWellKnownCorePartToPayload(uint8_t* freeLen, bool isRequestedBlock, char* message) {
+  if ((*freeLen) > strlen(message)) {
+    builder.appendPayload(message);
+    (*freeLen) += 2;
+  } else { //
+    if (isRequestedBlock) {
+      builder.appendPayload(message, (*freeLen));
+      return true;
+    } else {
+      builder.flushPayload();
+      builder.setPayload(message, (*freeLen));
+      (*freeLen) = builder.getPayloadLen();
+    }
+    return false;
+  }
+}
 // END:CoAP_Methodes-----------------------------
 
 
