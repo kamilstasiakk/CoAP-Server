@@ -1,10 +1,12 @@
+
+
 #include <Resources.h>
 #include <CoapParser.h>
 #include <CoapBuilder.h>
 
 /*
   CoapServer.ino
-  Created in 2017 by:textValue
+  Created in 2017 by:value
     Krzysztof Kossowski,
     Kamil Stasiak;
     Piotr Kucharski;
@@ -89,35 +91,35 @@ void initializeResourceList() {
   resources[1].uri = "sensor/lamp";
   resources[1].resourceType = "Lamp";
   resources[1].interfaceDescription = "state";
-  strcpy(resources[0].textValue, "0"); //OFF
+  strcpy(resources[0].value, '0'); //OFF
   resources[1].flags = B00000010;
 
   // przycisk
   resources[2].uri = "sensor/button";
   resources[2].resourceType = "Button";
   resources[2].interfaceDescription = "state";
-  strcpy(resources[1].textValue, "0");
+  strcpy(resources[1].value, '0');
   resources[2].flags = B00000101;
 
   // metryka PacketLossRate
   resources[3].uri = "metric/PLR";
   resources[3].resourceType = "PacketLossRate";
   resources[3].interfaceDescription = "value";
-  strcpy(resources[2].textValue, "0"); //OFF
+  strcpy(resources[2].value, "0"); //OFF
   resources[3].flags = B00000000;
 
   // metryka ByteLossRate
   resources[4].uri = "metric/BLR";
   resources[4].resourceType = "ByteLossRate";
   resources[4].interfaceDescription = "value";
-  strcpy(resources[4].textValue, "0");
+  strcpy(resources[4].value, "0");
   resources[4].flags = B00000000;
 
   // metryka MeanAckDelay
   resources[5].uri = "metric/MAD";
   resources[5].resourceType = "MeanACKDelay";
   resources[5].interfaceDescription = "value";
-  strcpy(resources[5].textValue, "0");
+  strcpy(resources[5].value, "0");
   resources[5].flags = B00000000;
 
   // well-known.core
@@ -125,12 +127,12 @@ void initializeResourceList() {
   resources[0].resourceType = "";
   resources[0].interfaceDescription = "";
   Resource resources[RESOURCES_COUNT];
-  strcpy(resources[5].textValue, "0");
+  strcpy(resources[5].value, "0");
   resources[0].flags = B00000000;
 
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
   // TO_DO: trzeba tutaj dorobić pętlę, jeżeli zaczyna sie od /sensor/ to wyslij geta
-  sendMessageToThing(GET_TYPE, ( (resources[1].flags & 0x1c) >> 2), 0);
+  //sendMessageToThing(GET_TYPE, ( (resources[1].flags & 0x1c) >> 2), 0);
 }
 
 // End:Resources--------------------------------
@@ -186,7 +188,7 @@ void receiveEthernetMessage() {
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if (packetSize) {
     if (packetSize >= 4) {
-      Serial.println(F("receive"));
+      Serial.println(F("[receiveEthernetMessage]"));
       Udp.read(ethMessage, MAX_BUFFER);
       getCoapClienMessage(ethMessage, Udp.remoteIP(), Udp.remotePort());
     }
@@ -203,7 +205,7 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
   Udp.beginPacket(ip, port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
-
+  
   Serial.println(F("send: "));
   Serial.println(message);
 
@@ -227,11 +229,18 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
     - GET, PUT: taki kod może miec tylko wiadomość typu CON lub NON (inaczej wyślij błąd BAD_REQUEST);
 */
 void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
+
+  Serial.println(F("message:"));
+  Serial.println(message);
+  
+  
   if (parser.parseVersion(message) != 1) {
+    Serial.println(F("error1"));
     sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG VERSION TYPE");
     return;
   }
   else if ( parser.parseCodeClass(message) != CLASS_REQ) {
+    Serial.println(F("error2"));
     sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG CLASS TYPE");
     return;
   }
@@ -244,6 +253,7 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       }
       break;
     case DETAIL_GET:
+      Serial.println(F("DETAIL_GET"));
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
         receiveGetRequest(message, ip, port);
         return;
@@ -296,17 +306,19 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       -
 */
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
-  Serial.println(F("get"));
+  Serial.println(F("[get]"));
   char etagOptionValues[ETAG_MAX_OPTIONS_COUNT][8];
   int etagValueNumber = 0;
   uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
-  char observeOptionValue[3] = {'0', '0', '2'}; // klient może wysłac jedynie 0 lub 1
+  uint8_t observeOptionValue = 2; // klient może wysłac jedynie 0 lub 1
   char uriPath[150] = "";
   uint16_t acceptOptionValue = 0;
   uint8_t blockOptionValue = 0;
 
   /*---wczytywanie opcji-----------------------------------------------------------------------------*/
   uint8_t optionNumber = parser.getFirstOption(message);
+  Serial.println(F("option number"));
+   Serial.println(optionNumber);
   if ( optionNumber != URI_PATH ) {
     if ( optionNumber > URI_PATH ) {
       /* pierwsza opcja ma numer większy niż URI-PATH - brak wskazania zasobu */
@@ -319,13 +331,22 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
         if ( optionNumber == ETAG ) {
           /* wystąpiła opcja ETAG, zapisz jej zawartość */
           strcpy(etagOptionValues[etagValueNumber++], parser.fieldValue);
+          Serial.println(F("[get]etag"));
         }
         if ( optionNumber == OBSERVE ) {
           /* wystąpiła opcja OBSERVE, zapisz jej zawartość */
-          strcpy(observeOptionValue, parser.fieldValue);
+         if (strlen(parser.fieldValue) == 0 ) {
+          observeOptionValue = 0;
+         }
+         else {
+          observeOptionValue = parser.fieldValue - '0';
+         }
+         Serial.println(F("[get]observe"));
         }
         if ( optionNumber > URI_PATH || optionNumber == NO_OPTION ) {
           /* brak opcji URI-PATH - brak wskazania zasobu */
+            Serial.println(F("option number 2"));
+            Serial.println(optionNumber);
           sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
           return;
         }
@@ -336,15 +357,22 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
   /* odczytujemy wartość URI-PATH */
   strcpy(uriPath, parser.fieldValue);
-  while ((optionNumber = parser.getNextOption(message)) == URI_PATH) {
+
+  optionNumber = parser.getNextOption(message);
+  while (optionNumber == URI_PATH) {
+    strcat(uriPath, "/");
     strcat(uriPath, parser.fieldValue);
+    optionNumber = parser.getNextOption(message);
   }
 
+  Serial.println(F("[get]uri"));
+  Serial.println(uriPath);
   /* przeglądamy dalsze opcje wiadomości w celu odnalezienia opcji ACCEPT */
   while ( optionNumber != NO_OPTION ) {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
       acceptOptionValue = parser.fieldValue;
+      Serial.println(F("[get]accept"));
       break;
     }
     if ( optionNumber == BLOCK2 ) {
@@ -364,23 +392,28 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
     /* sprawdzamy, czy wskazanym zasobem jest well.known/core*/
     if ( strcmp(resources[0].uri, uriPath ) == 0 ) {
       /* wysyłamy wiadomosc zwrotna z ladunkiem */
-      sendWellKnownContentResponse(ip, portNumber, "0", ((blockOptionValue & 0xf0) >> 4), (blockOptionValue & 0x07))
+      sendWellKnownContentResponse(ip, portNumber, "0", ((blockOptionValue & 0xf0) >> 4), (blockOptionValue & 0x07));
     }
 
     if ( strcmp(resources[resourceNumber].uri, uriPath) == 0) {
       /* wskazany zasób znajduje się na serwerze */
-
+      Serial.println(F("Zasob jest na serwerze"));
+      Serial.println(resourceNumber);
       /* zmienne mówiące o pozycji w listach */
       uint8_t observatorIndex = MAX_OBSERVATORS_COUNT + 1;
       uint8_t etagIndex = MAX_ETAG_COUNT + 1;
 
-      /*-----analiza zawartości opcji OBSERVE-----------------------------------------------------------------------------*/
+      /*-----analiza zawartości opcji OBSERVE-----------------------------------------------------------------------------*/     
       if ( observeOptionValue != 2 ) {
+        Serial.println(F("observe option value"));
+        Serial.println(observeOptionValue);
         /* opcja OBSERVE wystąpiła w żądaniu */
-        if ( observeOptionValue == "0" || observeOptionValue == "1") {
+        if ( observeOptionValue == 0 || observeOptionValue == 1) {
           /* 0 - jeżeli dany klient nie znajduje się na liście obserwatorów to go dodajemy */
           /* 1 -  jeżeli dany klienta znajduje sie na liscie obserwatorów to usuwamy go */
-
+           
+           Serial.println(F("Opcja observe wystapila"));
+           
           /* sprawdzanie, czy dany zasób może być obserwowany */
           if ( (resources[resourceNumber].flags & 0xfe) == 1 ) {
             /* zasób może być obserwowany */
@@ -392,7 +425,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                   /* dany wpis jest oznaczony jako aktywny */
                   if ( observators[observatorIndex].ipAddress == ip ) {
                     if ( observators[observatorIndex].portNumber == portNumber ) {
-                      if ( observeOptionValue == "1" ) {
+                      if ( observeOptionValue == 1 ) {
                         /* usuń klienta z listy obserwatorów - zmień status na wolny */
                         observators[observatorIndex].details = (observators[observatorIndex].details | 0x80);
                         break;
@@ -417,7 +450,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
             } // koniec fora
 
             /* jeżeli dany klient nie znajdował się na liście, to szukamy pierwszego wolnego miejsca aby go zapisać */
-            if (!alreadyExist && observeOptionValue == "0") {
+            if (!alreadyExist && observeOptionValue == 0) {
               for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++) {
                 if ( observators[observatorIndex].details >= 128) {
                   /* jeżeli jest jeszcze miejsce na liście obserwatorów, to dopisz klienta */
@@ -440,7 +473,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
           }
           else {
             /* zasób nie może być obserwowany  - pomijamy opcje, wiadomośc zwrotna nie będzie zawierać opcji observe */
-            strcpy(observeOptionValue, "2");
+            observeOptionValue =  2;
           }
         }
         else {
@@ -468,7 +501,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
               if ( strcmp(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, etagOptionValues[parsedEtagNumber]) == 0 ) {
                 /* znaleziono etag pasujący do żądanego */
                 /* sprawdz, czy dana wartość jest nadal aktualna */
-                if (observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->savedValue == resources[resourceNumber].textValue ) {
+                if (observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->savedValue == resources[resourceNumber].value ) {
                   /* wartość związana z etagiem jest nadal aktualna */
                   /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
                   for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
@@ -501,7 +534,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                   /* szukamy, czy dany zasób ma już przypisany etag do takiej wartości jaką ma obecnie */
                   for (int globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
                     if ( strcmp(globalEtags[globalIndex].resource->uri, resources[resourceNumber].uri ) == 0) {
-                      if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].textValue ) {
+                      if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].value ) {
                         /* znaleziono globalny etag skojarzony z danym zasobem i danym stanem zasobu */
 
                         /* przeszukujemy listę etagów, ktore są znane obserwatorowi w celu znalezienia aktualnego etaga */
@@ -569,7 +602,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                         }
                         else {
                           /* brak miejsca na nowy etag - zwróc wiadomość 2.05 content bez opcji etag, z opcją observe */
-                          sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                          sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].value, true);
                           return;
                         }
                       }
@@ -584,7 +617,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
                       /* tworzymy nowy wpis w tablicy globlnej etagów */
                       globalEtags[globalIndex].resource = &resources[resourceNumber];
-                      globalEtags[globalIndex].savedValue = resources[resourceNumber].textValue;
+                      globalEtags[globalIndex].savedValue = resources[resourceNumber].value;
                       globalEtags[globalIndex].etagId = ++globalEtagCounter;
                       globalEtags[globalIndex].timestamp = (millis() / 1000);
                       globalEtags[globalIndex].details = 0; //active, text
@@ -619,7 +652,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                     }
                   }
                   /* brak miejsca na nową wartość etag - wyślij wiadomość 2.05 content z opcją observe, z ładunkiem, bez opcji etag */
-                  sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+                  sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].value, true);
                   return;
                 }
               }
@@ -668,23 +701,48 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
       if ( observeOptionValue != 2 ) {
         /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
-        sendContentResponse(ip, portNumber, observators[observatorIndex].token, resources[resourceNumber].textValue, true);
+        sendContentResponse(ip, portNumber, observators[observatorIndex].token, getCharValueFromResourceValue(resources[resourceNumber].value, 0), true);
         return;
       }
       /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
 
       /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
       /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
-      sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), resources[resourceNumber].textValue, false);
+      Serial.println(F("resourceNumber"));
+      Serial.println(resourceNumber);
+      Serial.println(resources[resourceNumber].value);
+      
+      sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), resources[resourceNumber].value , false);
+      return;
       /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
-
-
+      
     }  //if (strcmp(resources[resourceNumber].uri, uriPath) == 0)
   } //for loop (przeszukiwanie zasobu)
 
   /* nie znaleziono zasobu na serwerze */
   /* wiadomość zwrotna zawierająca kod błedu 4.04 NOT_FOUND */
   sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
+}
+
+
+char* getCharValueFromResourceValue(unsigned long value, uint16_t requestedType){
+  switch (requestedType) {
+          case 0:
+            /* plain-text */
+            if (value < 10 ){
+              return value + '0';
+            }
+            else {
+              //poprawic
+              return '0';
+            }
+            break;
+//          case 50:
+//            /* j-son */
+//            break;
+//          default:
+//            break;
+        }
 }
 
 /**
@@ -882,23 +940,39 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
     -jesli w żądaniu jest token to go przepisujemy
 */
 void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_t errorType, char * errorMessage) {
+  Serial.println(F("send error message"));
   builder.init();
+  Serial.println(F("Parser Type"));
+  Serial.println(parser.parseType(message));
   if (parser.parseType(message) == TYPE_CON)
     builder.setType(TYPE_ACK);
   else
+  {
     builder.setType(TYPE_NON);
+  }
+  Serial.println(F("Parser Token Len"));
+  Serial.println(parser.parseTokenLen(message));
   if (parser.parseTokenLen(message) > 0) {
     builder.setToken(parser.parseToken(message, parser.parseTokenLen(message)));
-    if (errorType < 500) { //server error
-      builder.setCodeClass(CLASS_SERR);
-    } else {
-      builder.setCodeClass(CLASS_CERR);
-      builder.setCodeDetail(errorType);
-      builder.setMessageId(messageId++);
-      builder.setPayload(errorMessage);
-      sendEthernetMessage(builder.build(), ip, portNumber);
-    }
   }
+
+  if (errorType < 500) { //server error
+    builder.setCodeClass(CLASS_SERR);
+
+  } else {
+    builder.setCodeClass(CLASS_CERR);
+  }
+
+  builder.setCodeDetail(errorType);
+  builder.setMessageId(messageId++);
+  builder.setPayload(errorMessage);
+
+  Serial.println(F("cdo"));
+
+  sendEthernetMessage(builder.build(), ip, portNumber);
+
+
+
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania.
@@ -975,9 +1049,21 @@ void sendAckResponse(Session* session) {
     ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
 */
 void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, char* payloadValue, bool addObserveOption) {
-  char response;
+  
+  Serial.println(F("sendContentResponse"));
+  Serial.println(payloadValue);
+  
+  char* response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
+  response = builder.build();
+
+  /* wyślij utworzoną wiaodmość zwrotną */
+  Serial.println(response[0],BIN);
   builder.setType(TYPE_NON);
+  response = builder.build();
+
+  /* wyślij utworzoną wiaodmość zwrotną */
+  Serial.println(response[0],BIN);
 
   /* kod wiaodmości 2.05 CONTENT */
   builder.setCodeClass(CLASS_SUC);
@@ -997,6 +1083,12 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
   response = builder.build();
 
   /* wyślij utworzoną wiaodmość zwrotną */
+  Serial.println(response[0],BIN);
+  Serial.println(response[1],BIN);
+  Serial.println(response[2],BIN);
+  Serial.println(response[3],BIN);
+  Serial.println(response);
+  
   sendEthernetMessage(response, ip , portNumber);
 }
 /*
@@ -1127,8 +1219,9 @@ void setWellKnownCorePayload(uint16_t blockNumber, uint8_t blockSize) {
     builder.setPayload("");
   }
   uint8_t currentBlock = 0;
+  uint8_t freeLen = blockSize - 1 - builder.getPayloadLen(); //blockSize -1, bo musimy jeszcze zmiescic znak konca
   for (uint8_t index = 1; index < RESOURCES_COUNT; index++ ) {
-    uint8_t freeLen = blockSize - 1 - builder.getPayloadLen(); //blockSize -1, bo musimy jeszcze zmiescic znak konca
+    
     if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "</")) {
       return;
     }
@@ -1139,7 +1232,7 @@ void setWellKnownCorePayload(uint16_t blockNumber, uint8_t blockSize) {
     if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, ">;")) {
       return;
     }
-    if ((resources[index].flag & 0x01) == 1 ) {
+    if ((resources[index].flags & 0x01) == 1 ) {
       if (setWellKnownCorePartToPayload(&freeLen, currentBlock == blockNumber, "</obs>;")) {
         return;
       }
@@ -1214,7 +1307,7 @@ void getMessageFromThing(byte message) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
         // aktualizujemy zawartość value w zasobie
-        strcpy(resources[resourceNumber].textValue, (message & 0x07));
+        strcpy(resources[resourceNumber].value, (message & 0x07));
 
 
 

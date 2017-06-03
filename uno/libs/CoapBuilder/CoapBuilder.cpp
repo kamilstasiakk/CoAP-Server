@@ -151,11 +151,45 @@ void CoapBuilder::setPayload(char* value)
   message[messageLen + i] = '\0';
   _payloadLen = strlen(value);
 }
+
+void CoapBuilder::setPayload(char* value, uint8_t start)
+{
+  uint8_t i;
+  uint8_t messageLen = strlen(message);
+  //adding payload marker
+  message[messageLen ++] = 255;
+  for (i = start; i < strlen(value); i++) {
+    message[messageLen + i] = value[i];
+  }
+  message[messageLen + i] = '\0';
+  _payloadLen = strlen(value);
+}
+
 //append string to payload
 void CoapBuilder::appendPayload(char* value) {
 	uint8_t i;
   uint8_t messageLen = strlen(message);
   for (i = 0; i < strlen(value); i++) {
+    message[messageLen + i] = value[i];
+  }
+  message[messageLen + i] = '\0';
+  _payloadLen += strlen(value);
+}
+
+void CoapBuilder::appendPayload(char* value, uint8_t len) {
+	uint8_t i;
+  uint8_t messageLen = strlen(message);
+  for (i = 0; i < len; i++) {
+    message[messageLen + i] = value[i];
+  }
+  message[messageLen + i] = '\0';
+  _payloadLen += strlen(value);
+}
+
+void CoapBuilder::appendPayload(char* value, uint8_t start, uint8_t end) {
+	uint8_t i;
+  uint8_t messageLen = strlen(message);
+  for (i = start; i < end; i++) {
     message[messageLen + i] = value[i];
   }
   message[messageLen + i] = '\0';

@@ -28,6 +28,7 @@ const uint16_t URI_PATH = 11;
 const uint16_t CONTENT_FORMAT = 12;
 const uint16_t ACCEPT = 17;
 const uint16_t OBSERVE = 6;
+const uint16_t BLOCK2 = 23;
 const uint16_t NO_OPTION = 0;
 
 const uint8_t PLAIN_TEXT = 0;

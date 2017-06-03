@@ -38,8 +38,11 @@ class CoapBuilder
     void setOption(uint32_t optionNumber, char* value);
     //sets Payload
     void setPayload(char* value);
+    void setPayload(char* value, uint8_t start);
 	//appends to payload
+	void appendPayload(char* value, uint8_t len);
 	void appendPayload(char* value);
+	void appendPayload(char* value, uint8_t start, uint8_t end);
 	void flushPayload();
 	uint8_t getPayloadLen();
     char* build(); 
