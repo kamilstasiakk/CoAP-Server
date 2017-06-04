@@ -64,14 +64,15 @@ CoapBuilder builder = CoapBuilder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
 
 void setup() {
-
   SPI.begin();
   Serial.begin(9600);
+  
   initializeRF24Communication();
   initializeEthernetCommunication();
 
   initializeResourceList();
-  Serial.println(F("."));
+  
+  Serial.println(F("[setup]->READY"));
 }
 
 void loop() {
@@ -80,13 +81,19 @@ void loop() {
   receiveRF24Message();
 
   receiveEthernetMessage();
-
 }
 
 
 
 // Resources:Methodes---------------------------
 void initializeResourceList() {
+    // well-known.core
+  resources[0].uri = ".well-known/core";
+  resources[0].resourceType = "";
+  resources[0].interfaceDescription = "";
+  strcpy(resources[5].value, "0");
+  resources[0].flags = B00000000;
+  
   // lampka
   resources[1].uri = "sensor/lamp";
   resources[1].resourceType = "Lamp";
@@ -121,14 +128,6 @@ void initializeResourceList() {
   resources[5].interfaceDescription = "value";
   strcpy(resources[5].value, "0");
   resources[5].flags = B00000000;
-
-  // well-known.core
-  resources[0].uri = ".well-known/core";
-  resources[0].resourceType = "";
-  resources[0].interfaceDescription = "";
-  Resource resources[RESOURCES_COUNT];
-  strcpy(resources[5].value, "0");
-  resources[0].flags = B00000000;
 
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
   // TO_DO: trzeba tutaj dorobić pętlę, jeżeli zaczyna sie od /sensor/ to wyslij geta
@@ -166,9 +165,9 @@ void receiveRF24Message() {
 void sendRF24Message(byte message) {
   RF24NetworkHeader header;
   network.write(header, &message, sizeof(message));
-  Serial.println(F("-.-"));
 }
 // END:RF23_Methodes----------------------------
+
 
 // START:Ethernet_Methodes----------------------------
 /*
@@ -188,7 +187,9 @@ void receiveEthernetMessage() {
   int packetSize = Udp.parsePacket(); //the size of a received UDP packet, 0 oznacza nieodebranie pakietu
   if (packetSize) {
     if (packetSize >= 4) {
-      Serial.println(F("[receiveEthernetMessage]"));
+      
+      Serial.println(F("[RECEIVE][ETH]->message"));
+      
       Udp.read(ethMessage, MAX_BUFFER);
       getCoapClienMessage(ethMessage, Udp.remoteIP(), Udp.remotePort());
     }
@@ -206,8 +207,11 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
   
-  Serial.println(F("send: "));
-  Serial.println(message);
+  Serial.println(F("[SEND][ETH]->message:"));
+//  for(int i =0; i<messageSize; i++){
+//    Serial.println(message[i],BIN);
+//  }
+  Serial.println(F("[SEND][ETH]->fin:"));
 
   //jeżeli liczba danych przyjętych do wysłania przez warstwę niższą jest mniejsza niż rozmiar wiadomości to?
   if ( r < messageSize ) {
@@ -230,17 +234,15 @@ void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
 */
 void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
 
-  Serial.println(F("message:"));
+  Serial.println(F("[RECEIVE][COAP]->Message:"));
   Serial.println(message);
-  
+  Serial.println(F("[RECEIVE][COAP]->END Message"));
   
   if (parser.parseVersion(message) != 1) {
-    Serial.println(F("error1"));
     sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG VERSION TYPE");
     return;
   }
   else if ( parser.parseCodeClass(message) != CLASS_REQ) {
-    Serial.println(F("error2"));
     sendErrorResponse(ip, port, message, BAD_REQUEST, "WRONG CLASS TYPE");
     return;
   }
@@ -253,7 +255,6 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       }
       break;
     case DETAIL_GET:
-      Serial.println(F("DETAIL_GET"));
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
         receiveGetRequest(message, ip, port);
         return;
@@ -261,7 +262,7 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       break;
     case DETAIL_PUT:
       if ( (parser.parseType(message) == TYPE_CON) || (parser.parseType(message) == TYPE_NON) ) {
-        //        receivePutRequest(message, ip, port);
+        receivePutRequest(message, ip, port);
         return;
       }
       break;
@@ -306,7 +307,9 @@ void getCoapClienMessage(char* message, IPAddress ip, uint16_t port) {
       -
 */
 void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
-  Serial.println(F("[get]"));
+
+  Serial.println(F("[RECEIVE][COAP][GET]"));
+  
   char etagOptionValues[ETAG_MAX_OPTIONS_COUNT][8];
   int etagValueNumber = 0;
   uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
@@ -317,8 +320,10 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
   /*---wczytywanie opcji-----------------------------------------------------------------------------*/
   uint8_t optionNumber = parser.getFirstOption(message);
-  Serial.println(F("option number"));
-   Serial.println(optionNumber);
+
+  Serial.println(F("[RECEIVE][COAP][GET]->First Option Number"));
+  Serial.println(optionNumber);
+  
   if ( optionNumber != URI_PATH ) {
     if ( optionNumber > URI_PATH ) {
       /* pierwsza opcja ma numer większy niż URI-PATH - brak wskazania zasobu */
@@ -331,7 +336,10 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
         if ( optionNumber == ETAG ) {
           /* wystąpiła opcja ETAG, zapisz jej zawartość */
           strcpy(etagOptionValues[etagValueNumber++], parser.fieldValue);
-          Serial.println(F("[get]etag"));
+
+          Serial.println(F("[RECEIVE][COAP][GET]->Etag option"));
+          Serial.println(etagOptionValues[etagValueNumber-1]);
+          
         }
         if ( optionNumber == OBSERVE ) {
           /* wystąpiła opcja OBSERVE, zapisz jej zawartość */
@@ -341,12 +349,13 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
          else {
           observeOptionValue = parser.fieldValue - '0';
          }
-         Serial.println(F("[get]observe"));
+
+         Serial.println(F("[RECEIVE][COAP][GET]->Observe option"));
+         Serial.println(observeOptionValue);
+         
         }
         if ( optionNumber > URI_PATH || optionNumber == NO_OPTION ) {
           /* brak opcji URI-PATH - brak wskazania zasobu */
-            Serial.println(F("option number 2"));
-            Serial.println(optionNumber);
           sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
           return;
         }
@@ -365,19 +374,28 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
     optionNumber = parser.getNextOption(message);
   }
 
-  Serial.println(F("[get]uri"));
+  Serial.println(F("[RECEIVE][COAP][GET]->URI_Path option"));
   Serial.println(uriPath);
+
+  
   /* przeglądamy dalsze opcje wiadomości w celu odnalezienia opcji ACCEPT */
   while ( optionNumber != NO_OPTION ) {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
       acceptOptionValue = parser.fieldValue;
-      Serial.println(F("[get]accept"));
+
+      Serial.println(F("[RECEIVE][COAP][GET]->Accpet option"));
+      Serial.println(acceptOptionValue);
+
       break;
     }
     if ( optionNumber == BLOCK2 ) {
       /* wystąpiła opcja BLOCK2, zapisz jej zawartość */
       blockOptionValue = parser.fieldValue[0];
+
+      Serial.println(F("[RECEIVE][COAP][GET]->BLOCK2 option"));
+      Serial.println(blockOptionValue);
+      
       break;
     }
   }
@@ -389,31 +407,30 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   /*----analiza wiadomości---- */
   /* szukamy wskazanego zasobu na serwerze */
   for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
+ 
     /* sprawdzamy, czy wskazanym zasobem jest well.known/core*/
     if ( strcmp(resources[0].uri, uriPath ) == 0 ) {
-      /* wysyłamy wiadomosc zwrotna z ladunkiem */
+      /* wysyłamy wiadomosc zwrotna z ladunkiem w opcji blokowej */
       sendWellKnownContentResponse(ip, portNumber, "0", ((blockOptionValue & 0xf0) >> 4), (blockOptionValue & 0x07));
     }
 
     if ( strcmp(resources[resourceNumber].uri, uriPath) == 0) {
       /* wskazany zasób znajduje się na serwerze */
-      Serial.println(F("Zasob jest na serwerze"));
-      Serial.println(resourceNumber);
+        
+      Serial.println(F("[RECEIVE][COAP][GET]->Resource Number:"));
+      Serial.println(resourceNumber); 
+      
       /* zmienne mówiące o pozycji w listach */
       uint8_t observatorIndex = MAX_OBSERVATORS_COUNT + 1;
       uint8_t etagIndex = MAX_ETAG_COUNT + 1;
 
+
       /*-----analiza zawartości opcji OBSERVE-----------------------------------------------------------------------------*/     
       if ( observeOptionValue != 2 ) {
-        Serial.println(F("observe option value"));
-        Serial.println(observeOptionValue);
         /* opcja OBSERVE wystąpiła w żądaniu */
         if ( observeOptionValue == 0 || observeOptionValue == 1) {
           /* 0 - jeżeli dany klient nie znajduje się na liście obserwatorów to go dodajemy */
           /* 1 -  jeżeli dany klienta znajduje sie na liscie obserwatorów to usuwamy go */
-           
-           Serial.println(F("Opcja observe wystapila"));
-           
           /* sprawdzanie, czy dany zasób może być obserwowany */
           if ( (resources[resourceNumber].flags & 0xfe) == 1 ) {
             /* zasób może być obserwowany */
@@ -483,8 +500,6 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
         }
       }
       /*-----koniec analizy wartości observe----------------------------------------------------------------------------- */
-
-      char value;
 
       /*-----analiza wartości parametrów ETAG----------------------------------------------------------------------------- */
       if (  etagValueNumber != 0 ) {
@@ -693,10 +708,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
         /* analiza wiadomości z opcją accept + URI_PATH */
       }
-
-
       /*-------koniec analizy wiadomości z opcją acccept-----------------------------------------------------------------------*/
-
 
       /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
       if ( observeOptionValue != 2 ) {
@@ -706,12 +718,11 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       }
       /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
 
+
       /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
       /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
-      Serial.println(F("resourceNumber"));
-      Serial.println(resourceNumber);
-      Serial.println(resources[resourceNumber].value);
-
+      Serial.println(F("[RECEIVE][COAP][GET]->Only Uri Path"));
+      
       char charValue[2];
       getCharValueFromResourceValue(charValue,resources[resourceNumber].value,0);
       sendContentResponse(ip, portNumber, parser.parseToken(message, parser.parseTokenLen(message)), charValue , false);
@@ -723,6 +734,8 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
   /* nie znaleziono zasobu na serwerze */
   /* wiadomość zwrotna zawierająca kod błedu 4.04 NOT_FOUND */
+  Serial.println(F("[RECEIVE][COAP][GET]->Resource not found"));
+  
   sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
 }
 
@@ -840,98 +853,98 @@ void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
     -TO_DO: obsługa XML i JSONa
 */
-//void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
-//  uint8_t optionNumber = parser.getFirstOption(message);
-//  if (optionNumber != URI_PATH) {
-//    if (optionNumber > URI_PATH) {
-//      sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
-//      return;
-//    } else {
-//      while (optionNumber != URI_PATH)  {
-//        //nie ma uri! BLAD
-//        if (optionNumber > URI_PATH || optionNumber == NO_OPTION) {
-//          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
-//          return;
-//        }
-//        optionNumber = parser.getNextOption(message);
-//      } // end of while loop
-//    }
-//  } // end of if (firstOption != URI_PATH)
-//
-//  //sparsowaliśmy uri - szukamy zasobu na serwerze
-//  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
-//    if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0) {
-//      // sprawdzamy, czy na danym zasobie można zmienić stan
-//      if ((resources[resourceNumber].flags & 0x02) == 2) {
-//        // szukamy wolnej sesji
-//        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-//          if ((sessions[sessionNumber].details & 0x80) == 128) {
-//            // sesja wolna
-//            sessions[sessionNumber].ipAddress = ip;
-//            sessions[sessionNumber].portNumber = portNumber;
-//            strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
-//            sessions[sessionNumber].messageID = parser.parseMessageId(message);
-//            sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
-//            sessions[sessionNumber].details = B00100000;  // active, put, text
-//
-//            // szukamy opcji ContentFormat
-//            optionNumber = parser.getNextOption(message);
-//            while (optionNumber != CONTENT_FORMAT)  {
-//              //nie ma content-format! BLAD
-//              if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
-//                sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
-//                return;
-//              }
-//              optionNumber = parser.getNextOption(message);
-//            }
-//
-//            // sprawdzamy zawartość opcji ContentFormat
-//            // zerowanie bitów content_type
-//            sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xe0);
-//            if (strlen(parser.fieldValue) > 0) {
-//              if (parser.fieldValue[0] == PLAIN_TEXT) {
-//                sessions[sessionNumber].details = (sessions[sessionNumber].details);
-//              }
-//              else if (parser.fieldValue[0] == XML) {
-//                sessions[sessionNumber].details = (sessions[sessionNumber].details | 41);
-//              }
-//              else if (parser.fieldValue[0] == JSON) {
-//                sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
-//              }
-//              else {
-//                sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
-//                return;
-//              }
-//            } else {
-//              sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
-//              return;
-//            }
-//
-//            // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
-//            if ( parser.parseType(message) == TYPE_CON ) {
-//              sendEmptyAckResponse(&sessions[sessionNumber]);
-//            }
-//
-//            // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-//            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message));
-//            return;
-//          } // end of (sessions[sessionNumber].contentFormat > 127)
-//
-//          // brak wolnej sesji - bład INTERNAL_SERVER_ERROR
-//          sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "Too much requests");
-//          return;
-//        } // end of for loop (przeszukiwanie sesji)
-//      } // end of if((resources[resourceNumber].flags & 0x02) == 2
-//
-//      // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
-//      sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Operation not permitted");
-//
-//    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
-//  } // end of for loop (przeszukiwanie zasobów)
-//
-//  // błędne uri - brak takiego zasobu na serwerze
-//  sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "No a such resource");
-//}
+void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
+  uint8_t optionNumber = parser.getFirstOption(message);
+  if (optionNumber != URI_PATH) {
+    if (optionNumber > URI_PATH) {
+      sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
+      return;
+    } else {
+      while (optionNumber != URI_PATH)  {
+        //nie ma uri! BLAD
+        if (optionNumber > URI_PATH || optionNumber == NO_OPTION) {
+          sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO URI");
+          return;
+        }
+        optionNumber = parser.getNextOption(message);
+      } // end of while loop
+    }
+  } // end of if (firstOption != URI_PATH)
+
+  //sparsowaliśmy uri - szukamy zasobu na serwerze
+  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
+    if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0) {
+      // sprawdzamy, czy na danym zasobie można zmienić stan
+      if ((resources[resourceNumber].flags & 0x02) == 2) {
+        // szukamy wolnej sesji
+        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+          if ((sessions[sessionNumber].details & 0x80) == 128) {
+            // sesja wolna
+            sessions[sessionNumber].ipAddress = ip;
+            sessions[sessionNumber].portNumber = portNumber;
+            strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
+            sessions[sessionNumber].messageID = parser.parseMessageId(message);
+            sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
+            sessions[sessionNumber].details = B00100000;  // active, put, text
+
+            // szukamy opcji ContentFormat
+            optionNumber = parser.getNextOption(message);
+            while (optionNumber != CONTENT_FORMAT)  {
+              //nie ma content-format! BLAD
+              if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
+                sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "NO CONTENT-FORMAT");
+                return;
+              }
+              optionNumber = parser.getNextOption(message);
+            }
+
+            // sprawdzamy zawartość opcji ContentFormat
+            // zerowanie bitów content_type
+            sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xe0);
+            if (strlen(parser.fieldValue) > 0) {
+              if (parser.fieldValue[0] == PLAIN_TEXT) {
+                sessions[sessionNumber].details = (sessions[sessionNumber].details);
+              }
+              else if (parser.fieldValue[0] == XML) {
+                sessions[sessionNumber].details = (sessions[sessionNumber].details | 41);
+              }
+              else if (parser.fieldValue[0] == JSON) {
+                sessions[sessionNumber].details = (sessions[sessionNumber].details | 50);
+              }
+              else {
+                sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Bad CONTENT-FORMAT");
+                return;
+              }
+            } else {
+              sendErrorResponse(ip, portNumber, ethMessage, BAD_REQUEST, "0 byte length CONTENT-FORMAT");
+              return;
+            }
+
+            // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
+            if ( parser.parseType(message) == TYPE_CON ) {
+              sendEmptyAckResponse(&sessions[sessionNumber]);
+            }
+
+            // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
+            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message));
+            return;
+          } // end of (sessions[sessionNumber].contentFormat > 127)
+
+          // brak wolnej sesji - bład INTERNAL_SERVER_ERROR
+          sendErrorResponse(ip, portNumber, ethMessage, INTERNAL_SERVER_ERROR, "Too much requests");
+          return;
+        } // end of for loop (przeszukiwanie sesji)
+      } // end of if((resources[resourceNumber].flags & 0x02) == 2
+
+      // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
+      sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Operation not permitted");
+
+    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
+  } // end of for loop (przeszukiwanie zasobów)
+
+  // błędne uri - brak takiego zasobu na serwerze
+  sendErrorResponse(ip, portNumber, ethMessage, NOT_FOUND, "No a such resource");
+}
 
 
 /*
@@ -1051,52 +1064,53 @@ void sendAckResponse(Session* session) {
 */
 void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, char* payloadValue, bool addObserveOption) {
   
-  Serial.println(F("sendContentResponse"));
+  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->token/payload/observeOption"));
+  Serial.println(tokenValue);
   Serial.println(payloadValue);
+  Serial.println(addObserveOption);
   
   char* response;
-  builder.setVersion(DEFAULT_SERVER_VERSION);
-  response = builder.build();
-
+  
   /* wyślij utworzoną wiaodmość zwrotną */
-  Serial.println(response[0],BIN);
-  builder.setType(TYPE_NON);
-  response = builder.build();
-
-  /* wyślij utworzoną wiaodmość zwrotną */
-  Serial.println(response[0],BIN);
-
   /* kod wiaodmości 2.05 CONTENT */
+  builder.init();
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_NON);
   builder.setCodeClass(CLASS_SUC);
   builder.setCodeDetail(5);
 
-  builder.setToken(tokenValue);
   builder.setMessageId(0);
+  builder.setToken(tokenValue);
 
   if (addObserveOption) {
     builder.setOption(OBSERVE, ++observeCounter);
   }
+  
   builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
-
   builder.setPayload(payloadValue);
 
   /* stwórz wiadomość zwrotną */
   response = builder.build();
 
   /* wyślij utworzoną wiaodmość zwrotną */
+  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->Build message bytes:"));
   Serial.println(response[0],BIN);
   Serial.println(response[1],BIN);
   Serial.println(response[2],BIN);
   Serial.println(response[3],BIN);
-  Serial.println(response);
+  Serial.println(response[4],BIN);
+  Serial.println(response[5],BIN);
+  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->END"));
   
   sendEthernetMessage(response, ip , portNumber);
-}
+} 
 /*
  * tak jak poprzednia funkcja z następującymi wyjątkami:
  * nie ma argumentu payload, ponieważ jest on w pewnym sensie stały (well-know-core)
  */
 void sendWellKnownContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, uint8_t blockNumber, uint8_t blockSize) {
+  Serial.println(F("[SEND][COAP][WELL_KNOWN]"));  
+  
   char response;
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
@@ -1303,14 +1317,14 @@ bool setWellKnownCorePartToPayload(uint8_t* freeLen, bool isRequestedBlock, char
     - jeżeli jest jakaś sesja związana z danym sensorID to przekaż ją do analizy;
 */
 void getMessageFromThing(byte message) {
+  Serial.println(F("[RECEIVE][MINI]->Start"));
+  
   if ( ((message & 0xc0) >> 6) == RESPONSE_TYPE ) {
     for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
         // aktualizujemy zawartość value w zasobie
         strcpy(resources[resourceNumber].value, (message & 0x07));
-
-
 
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
@@ -1337,6 +1351,8 @@ void getMessageFromThing(byte message) {
     Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
 */
 void sendMessageToThing(uint8_t type, uint8_t sensorID, uint8_t value) {
+  Serial.println(F("[SEND][MINI]->Start"));
+  
   byte message;
   message = ( message | ((type & 0x03) << 6) );
   message = ( message | ((sensorID & 0x07) << 3) );

@@ -1,0 +1,8 @@
+</.well-known/core>;sz=64,
+</sensor/lamp>;rt="Lamp";title="state”,
+</sensor/button>;obs;rt="Button";title="state,
+</metric/PLR>;rt="PacketLossRate";title="value,
+</metric/BLR>;rt="ByteLossRate";title="value,
+</metric/MAD>;rt="MeanACKDelay";title="value,
+</sensor/lamp>;rt="Lamp";title="state”,
+</shutdown>
