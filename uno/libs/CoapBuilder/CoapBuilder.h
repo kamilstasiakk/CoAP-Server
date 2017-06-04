@@ -55,6 +55,7 @@ class CoapBuilder
     uint8_t _lastOptionLen; // Option length with option header
     uint8_t _lastOptionNum;
 	uint8_t _payloadLen;
+	uint8_t _messageLen;
     void setTokenLen(uint8_t value);
 	int8_t byteArrayCompere(byte* a, byte* b);
     void byteArrayCopy(byte* to, byte* from);

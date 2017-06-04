@@ -23,6 +23,7 @@ void CoapBuilder::init()
   message[3] = 0;
   message[4] = '\0';
   _lastOptionStart = 4;
+  _messageLen = 4;
 }
 
 void CoapBuilder::setVersion(uint8_t value)
@@ -63,6 +64,7 @@ void  CoapBuilder::setTokenLen(uint8_t value)
 	
 	Serial.println(message[0],BIN);
 	Serial.println(F("**[BUILDER][setTokenLen]:END"));
+	_messageLen += value;
 }
 
 void CoapBuilder::setCodeClass(uint8_t value)
@@ -109,13 +111,12 @@ void CoapBuilder::setToken(char* value)
 {
   uint8_t tokenLen = (uint8_t) strlen(value);
   setTokenLen(tokenLen);
-  uint8_t  messageLen = byteArrayLen(message);
   //shift if options or payload are set
-  if (messageLen > 4) {
+  if (_messageLen > 4) {
     //from message[messageLen - 1 + tokenLen] = message[messageLen - 1]
     //to message[messageLen - messageLen + 4 + tokenLen] = message[messageLen - messageLen + 4]
-    for (uint8_t j = 1; j > messageLen - 5; j++) {
-      message[messageLen - j + tokenLen] = message[messageLen - j];
+    for (uint8_t j = 1; j > _messageLen - 5; j++) {
+      message[_messageLen - j + tokenLen] = message[_messageLen - j];
     }
   } else {
     message[4 + tokenLen] = '\0';
@@ -128,8 +129,7 @@ void CoapBuilder::setToken(char* value)
   }
   
 	Serial.println(F("**[BUILDER][setToken]:Hole Message"));	
-	size_t messageSizeTMP = byteArrayLen(message);
-	for(int i = 0; i< messageSizeTMP; i++){
+	for(int i = 0; i< _messageLen; i++){
 		Serial.println(message[i],BIN);
 	}	
 	Serial.println(F("**[BUILDER][setToken]:END"));
@@ -154,15 +154,18 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   //writing option number 
   if (optionNumber < 13) {
 	  message[_lastOptionStart] = (optionNumber << 4);
+	  _messageLen += _lastOptionLen + 1;
   } else if (optionNumber < 269){
       message[_lastOptionStart] = (13 << 4);
       message[_lastOptionStart + 1] = (optionNumber - 13);
       optNumOffset = 1;
+	  _messageLen += _lastOptionLen + 2;
   } else {
     message[_lastOptionStart] = 14 << 4;
     message[_lastOptionStart + 1] = (((optionNumber - 269) & 0xff00) >> 8);
     message[_lastOptionStart + 2] = ((optionNumber - 269) & 0x00ff);
     optNumOffset = 2;
+	_messageLen += _lastOptionLen + 3;
   } 
   
     Serial.println(F("**[BUILDER][setOptions]:Option nubber"));
@@ -182,11 +185,13 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
       message[_lastOptionStart] += 13;
       message[_lastOptionStart + 1 + optNumOffset] = _lastOptionLen - 13;
       optLenOffset = 1;
+	  _messageLen++;
   } else {
     message[_lastOptionStart] += 14;
     message[_lastOptionStart + 1 + optNumOffset] = ((_lastOptionLen - 269) & 0xff00) >> 8;
     message[_lastOptionStart + 2 + optNumOffset] = (_lastOptionLen - 269) & 0x00ff;
     optLenOffset = 2;
+	_messageLen +=2;
   }
   
   //auxiliary adding to deacrease adding operations in for loop
@@ -217,13 +222,12 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
 void CoapBuilder::setPayload(char* value)
 {
   uint8_t i;
-  uint8_t messageLen = byteArrayLen(message);
   //adding payload marker
-  message[messageLen ++] = 255;
+  message[_messageLen ++] = 255;
   for (i = 0; i < strlen(value); i++) {
-    message[messageLen + i] = value[i];
+    message[_messageLen + i] = value[i];
   }
-  message[messageLen + i] = '\0';
+  message[_messageLen + i] = '\0';
   _payloadLen = strlen(value);
   
   
@@ -241,51 +245,48 @@ void CoapBuilder::setPayload(char* value)
 void CoapBuilder::setPayload(char* value, uint8_t start)
 {
   uint8_t i;
-  uint8_t messageLen = byteArrayLen(message);
   //adding payload marker
-  message[messageLen ++] = 255;
+  message[_messageLen ++] = 255;
   for (i = start; i < strlen(value); i++) {
-    message[messageLen + i] = value[i];
+    message[_messageLen + i] = value[i];
   }
-  message[messageLen + i] = '\0';
+  message[_messageLen + i] = '\0';
   _payloadLen = strlen(value);
 }
 
 //append string to payload
 void CoapBuilder::appendPayload(char* value) {
 	uint8_t i;
-  uint8_t messageLen = byteArrayLen(message);
   for (i = 0; i < strlen(value); i++) {
-    message[messageLen + i] = value[i];
+    message[_messageLen + i] = value[i];
   }
-  message[messageLen + i] = '\0';
+  message[_messageLen + i] = '\0';
   _payloadLen += strlen(value);
 }
 
 void CoapBuilder::appendPayload(char* value, uint8_t len) {
 	uint8_t i;
-  uint8_t messageLen = byteArrayLen(message);
   for (i = 0; i < len; i++) {
-    message[messageLen + i] = value[i];
+    message[_messageLen + i] = value[i];
   }
-  message[messageLen + i] = '\0';
+  message[_messageLen + i] = '\0';
   _payloadLen += strlen(value);
 }
 
 void CoapBuilder::appendPayload(char* value, uint8_t start, uint8_t end) {
 	uint8_t i;
-  uint8_t messageLen = byteArrayLen(message);
   for (i = start; i < end; i++) {
-    message[messageLen + i] = value[i];
+    message[_messageLen + i] = value[i];
   }
-  message[messageLen + i] = '\0';
+  message[_messageLen + i] = '\0';
   _payloadLen += strlen(value);
 }
 // remove Payload from message (payload tag is removed too)
 void CoapBuilder::flushPayload() {
+	_messageLen -= _payloadLen;
 	_payloadLen = 0;
 		uint8_t i;
-  for (i = 0; i < byteArrayLen(message); i++) {
+  for (i = 0; i <_messageLen; i++) {
     if (message[i] == 255) {
 		message[i] = '\0';
 		return;
@@ -312,7 +313,7 @@ byte* CoapBuilder::build()
 
 size_t CoapBuilder::getResponseSize()
 {
-	return byteArrayLen(message);
+	return _messageLen;
 }
 
 /*
