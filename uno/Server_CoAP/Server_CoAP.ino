@@ -91,42 +91,42 @@ void initializeResourceList() {
   resources[0].uri = ".well-known/core";
   resources[0].resourceType = "";
   resources[0].interfaceDescription = "";
-  byteArrayCopy(resources[5].value, "0");
+  strcpy(resources[5].value, "0");
   resources[0].flags = B00000000;
   
   // lampka
   resources[1].uri = "sensor/lamp";
   resources[1].resourceType = "Lamp";
   resources[1].interfaceDescription = "state";
-  byteArrayCopy(resources[0].value, '0'); //OFF
+  strcpy(resources[0].value, '0'); //OFF
   resources[1].flags = B00000010;
 
   // przycisk
   resources[2].uri = "sensor/button";
   resources[2].resourceType = "Button";
   resources[2].interfaceDescription = "state";
-  byteArrayCopy(resources[1].value, '0');
+  strcpy(resources[1].value, '0');
   resources[2].flags = B00000101;
 
   // metryka PacketLossRate
   resources[3].uri = "metric/PLR";
   resources[3].resourceType = "PacketLossRate";
   resources[3].interfaceDescription = "value";
-  byteArrayCopy(resources[2].value, "0"); //OFF
+  strcpy(resources[2].value, "0"); //OFF
   resources[3].flags = B00000000;
 
   // metryka ByteLossRate
   resources[4].uri = "metric/BLR";
   resources[4].resourceType = "ByteLossRate";
   resources[4].interfaceDescription = "value";
-  byteArrayCopy(resources[4].value, "0");
+  strcpy(resources[4].value, "0");
   resources[4].flags = B00000000;
 
   // metryka MeanAckDelay
   resources[5].uri = "metric/MAD";
   resources[5].resourceType = "MeanACKDelay";
   resources[5].interfaceDescription = "value";
-  byteArrayCopy(resources[5].value, "0");
+  strcpy(resources[5].value, "0");
   resources[5].flags = B00000000;
 
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
@@ -201,8 +201,7 @@ void receiveEthernetMessage() {
     - ip jest adresem ip hosta, do którego adresujemy wiadomość np:IPAddress adres(10,10,10,1)
     - port jest numerem portu hosta, do którego adresuemy wiadomość
 */
-void sendEthernetMessage(char* message, IPAddress ip, uint16_t port) {
-  size_t messageSize = strlen(message);
+void sendEthernetMessage(byte* message,size_t messageSize, IPAddress ip, uint16_t port) {
   Udp.beginPacket(ip, port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
@@ -314,7 +313,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   int etagValueNumber = 0;
   uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
   uint8_t observeOptionValue = 2; // klient może wysłac jedynie 0 lub 1
-  byte uriPath[50] = "";
+  char uriPath[50] = "";
   uint16_t acceptOptionValue = 0;
   uint8_t blockOptionValue = 0;
 
@@ -335,7 +334,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       while ( optionNumber != URI_PATH ) {
         if ( optionNumber == ETAG ) {
           /* wystąpiła opcja ETAG, zapisz jej zawartość */
-          byteArrayCopy(etagOptionValues[etagValueNumber++], parser.fieldValue);
+          strcpy(etagOptionValues[etagValueNumber++], parser.fieldValue);
 
           Serial.println(F("[RECEIVE][COAP][GET]->Etag option"));
           Serial.println(etagOptionValues[etagValueNumber-1]);
@@ -365,7 +364,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   } // end of if (firstOption != URI_PATH)
 
   /* odczytujemy wartość URI-PATH */
-  byteArrayCopy(uriPath, parser.fieldValue);
+  strcpy(uriPath, parser.fieldValue);
 
   optionNumber = parser.getNextOption(message);
   while (optionNumber == URI_PATH) {
@@ -409,12 +408,12 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
  
     /* sprawdzamy, czy wskazanym zasobem jest well.known/core*/
-    if ( byteArrayCompere(resources[0].uri, uriPath ) == 0 ) {
+    if ( strcmp(resources[0].uri, uriPath ) == 0 ) {
       /* wysyłamy wiadomosc zwrotna z ladunkiem w opcji blokowej */
       sendWellKnownContentResponse(ip, portNumber, "0", ((blockOptionValue & 0xf0) >> 4), (blockOptionValue & 0x07));
     }
 
-    if ( byteArrayCompere(resources[resourceNumber].uri, uriPath) == 0) {
+    if ( strcmp(resources[resourceNumber].uri, uriPath) == 0) {
       /* wskazany zasób znajduje się na serwerze */
         
       Serial.println(F("[RECEIVE][COAP][GET]->Resource Number:"));
@@ -455,7 +454,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                         }
                         else {
                           /* aktualizujemy numer tokena przypisanego do danego obserwatora */
-                          byteArrayCopy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
+                          strcpy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
                           alreadyExist = true;
                           break;
                         }
@@ -473,7 +472,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                   /* jeżeli jest jeszcze miejsce na liście obserwatorów, to dopisz klienta */
                   observators[observatorIndex].ipAddress = ip;
                   observators[observatorIndex].portNumber = portNumber;
-                  byteArrayCopy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
+                  strcpy(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)));
                   observators[observatorIndex].details = (observators[observatorIndex].details & 0x7f);
                   observators[observatorIndex].resource = &resources[resourceNumber];
                   alreadyExist = true;
@@ -513,7 +512,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
           for (int parsedEtagNumber = 0; parsedEtagNumber < etagValueNumber; parsedEtagNumber++) {
             /* znajdź wartość etaga w liscie etagów przypisanych do danego obserwatora */
             for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-              if ( byteArrayCompere(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, etagOptionValues[parsedEtagNumber]) == 0 ) {
+              if ( strcmp(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, etagOptionValues[parsedEtagNumber]) == 0 ) {
                 /* znaleziono etag pasujący do żądanego */
                 /* sprawdz, czy dana wartość jest nadal aktualna */
                 if (observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->savedValue == resources[resourceNumber].value ) {
@@ -525,7 +524,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                       sessions[sessionNumber].ipAddress = ip;
                       sessions[sessionNumber].portNumber = portNumber;
                       sessions[sessionNumber].messageID = ++messageId;
-                      byteArrayCopy(sessions[sessionNumber].token, observators[observatorIndex].token);
+                      strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                       sessions[sessionNumber].etag.savedValue = etagOptionValues[parsedEtagNumber];
                       sessions[sessionNumber].details = 0;  // active, put, text
 
@@ -548,13 +547,13 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
                   /* szukamy, czy dany zasób ma już przypisany etag do takiej wartości jaką ma obecnie */
                   for (int globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
-                    if ( byteArrayCompere(globalEtags[globalIndex].resource->uri, resources[resourceNumber].uri ) == 0) {
+                    if ( strcmp(globalEtags[globalIndex].resource->uri, resources[resourceNumber].uri ) == 0) {
                       if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].value ) {
                         /* znaleziono globalny etag skojarzony z danym zasobem i danym stanem zasobu */
 
                         /* przeszukujemy listę etagów, ktore są znane obserwatorowi w celu znalezienia aktualnego etaga */
                         for ( etagIndex = 0; etagIndex < MAX_ETAG_COUNT; etagIndex++ ) {
-                          if (byteArrayCompere(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, globalEtags[globalIndex].etagId) == 0) {
+                          if (strcmp(observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->etagId, globalEtags[globalIndex].etagId) == 0) {
                             /* znaleźliśmy etaga aktualnego w liście etagów znanych klientówi */
 
                             /* szukamy wolnej sesji - sesja potrzebna ze względu na wiadomość zwrtoną typu CON */
@@ -564,7 +563,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                                 sessions[sessionNumber].ipAddress = ip;
                                 sessions[sessionNumber].portNumber = portNumber;
                                 sessions[sessionNumber].messageID = ++messageId;
-                                byteArrayCopy(sessions[sessionNumber].token, observators[observatorIndex].token);
+                                strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                                 sessions[sessionNumber].etag.savedValue = globalEtags[globalIndex].savedValue;
                                 sessions[sessionNumber].details = 0;  // active, put, text
 
@@ -597,7 +596,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                               sessions[sessionNumber].ipAddress = ip;
                               sessions[sessionNumber].portNumber = portNumber;
                               sessions[sessionNumber].messageID = ++messageId;
-                              byteArrayCopy(sessions[sessionNumber].token, observators[observatorIndex].token);
+                              strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                               sessions[sessionNumber].etag.savedValue = globalEtags[globalIndex].savedValue;
                               sessions[sessionNumber].details = 0;  // active, put, text
 
@@ -648,7 +647,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
                           sessions[sessionNumber].ipAddress = ip;
                           sessions[sessionNumber].portNumber = portNumber;
                           sessions[sessionNumber].messageID = ++messageId;
-                          byteArrayCopy(sessions[sessionNumber].token, observators[observatorIndex].token);
+                          strcpy(sessions[sessionNumber].token, observators[observatorIndex].token);
                           sessions[sessionNumber].etag.savedValue = etagOptionValues[parsedEtagNumber];
                           sessions[sessionNumber].details = 0;  // active, put, text
 
@@ -729,7 +728,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       return;
       /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
       
-    }  //if (byteArrayCompere(resources[resourceNumber].uri, uriPath) == 0)
+    }  //if (strcmp(resources[resourceNumber].uri, uriPath) == 0)
   } //for loop (przeszukiwanie zasobu)
 
   /* nie znaleziono zasobu na serwerze */
@@ -766,11 +765,11 @@ int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, i
   if ( observatorIndex == (MAX_OBSERVATORS_COUNT + 1) ) {
     /*nie było opcji observe, trzeba sprawdzić czy klient jest na liscie obserwatorów*/
     for ( observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
-      if ( byteArrayCompere(observators[observatorIndex].resource->uri, resources[resourceNumber].uri)) {
+      if ( strcmp(observators[observatorIndex].resource->uri, resources[resourceNumber].uri)) {
         if ( observators[observatorIndex].details < 128 ) {
           if ( observators[observatorIndex].ipAddress == ip ) {
             if ( observators[observatorIndex].portNumber == portNumber ) {
-              if ( byteArrayCompere(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) ) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
+              if ( strcmp(observators[observatorIndex].token, parser.parseToken(message, parser.parseTokenLen(message)) ) == 0) { //DLACZEGO TOKEN MA SIE ROWNAC 0?
                 /* znaleziono klienta na liście obserwatorów */
                 break;
               }
@@ -873,7 +872,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
 
   //sparsowaliśmy uri - szukamy zasobu na serwerze
   for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
-    if (byteArrayCompere(resources[resourceNumber].uri, parser.fieldValue) == 0) {
+    if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0) {
       // sprawdzamy, czy na danym zasobie można zmienić stan
       if ((resources[resourceNumber].flags & 0x02) == 2) {
         // szukamy wolnej sesji
@@ -882,7 +881,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
             // sesja wolna
             sessions[sessionNumber].ipAddress = ip;
             sessions[sessionNumber].portNumber = portNumber;
-            byteArrayCopy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
+            strcpy(sessions[sessionNumber].token, parser.parseToken(message, parser.parseTokenLen(message)));
             sessions[sessionNumber].messageID = parser.parseMessageId(message);
             sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
             sessions[sessionNumber].details = B00100000;  // active, put, text
@@ -939,7 +938,7 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
       // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
       sendErrorResponse(ip, portNumber, ethMessage, METHOD_NOT_ALLOWED, "Operation not permitted");
 
-    } // end of if (byteArrayCompere(resources[resourceNumber].uri, parser.fieldValue) == 0)
+    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
   } // end of for loop (przeszukiwanie zasobów)
 
   // błędne uri - brak takiego zasobu na serwerze
@@ -954,18 +953,13 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
     -jesli w żądaniu jest token to go przepisujemy
 */
 void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_t errorType, char * errorMessage) {
-  Serial.println(F("send error message"));
   builder.init();
-  Serial.println(F("Parser Type"));
-  Serial.println(parser.parseType(message));
   if (parser.parseType(message) == TYPE_CON)
     builder.setType(TYPE_ACK);
   else
   {
     builder.setType(TYPE_NON);
   }
-  Serial.println(F("Parser Token Len"));
-  Serial.println(parser.parseTokenLen(message));
   if (parser.parseTokenLen(message) > 0) {
     builder.setToken(parser.parseToken(message, parser.parseTokenLen(message)));
   }
@@ -981,12 +975,7 @@ void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_
   builder.setMessageId(messageId++);
   builder.setPayload(errorMessage);
 
-  Serial.println(F("cdo"));
-
-  sendEthernetMessage(builder.build(), ip, portNumber);
-
-
-
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), ip, portNumber);
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania.
@@ -998,15 +987,14 @@ void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_
     - MessageID = MessageID z wiadomości;
 */
 void sendEmptyAckResponse(Session * session) {
-  byte response[4];
+  builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_ACK);
   builder.setCodeClass(CLASS_REQ);
   builder.setCodeDetail(DETAIL_EMPTY);
   builder.setMessageId(session->messageID);
-
-  byteArrayCopy(response, builder.build());
-  sendEthernetMessage(response, session->ipAddress, session->portNumber);
+  
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
 }
 /*
    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania wraz z ładunkiem.
@@ -1021,7 +1009,7 @@ void sendPiggybackAckResponse(IPAddress ip, uint16_t portNumber, char* message, 
     - kod wiadomości: 2.04 suc
 */
 void sendPutResponse(Session* session) {
-  char response;
+  builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
 
@@ -1032,9 +1020,8 @@ void sendPutResponse(Session* session) {
   builder.setToken(session->token);
   messageId += 1;
   builder.setMessageId(messageId);
-  response = builder.build();
 
-  sendEthernetMessage(response, session->ipAddress, session->portNumber);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
 
   // zmieniamy sesję z aktywnej na nieaktywną
   session->details = ((session->details ^ 0x80));
@@ -1069,8 +1056,6 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
   Serial.println(payloadValue);
   Serial.println(addObserveOption);
   
-  char* response;
-  
   /* wyślij utworzoną wiaodmość zwrotną */
   /* kod wiaodmości 2.05 CONTENT */
   builder.init();
@@ -1089,20 +1074,11 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
   builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
   builder.setPayload(payloadValue);
 
-  /* stwórz wiadomość zwrotną */
-  response = builder.build();
-
   /* wyślij utworzoną wiaodmość zwrotną */
-  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->Build message bytes:"));
-  Serial.println(response[0],BIN);
-  Serial.println(response[1],BIN);
-  Serial.println(response[2],BIN);
-  Serial.println(response[3],BIN);
-  Serial.println(response[4],BIN);
-  Serial.println(response[5],BIN);
-  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->END"));
+  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->"));
+  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->END")); 
   
-  sendEthernetMessage(response, ip , portNumber);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), ip , portNumber);
 } 
 /*
  * tak jak poprzednia funkcja z następującymi wyjątkami:
@@ -1111,7 +1087,7 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
 void sendWellKnownContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, uint8_t blockNumber, uint8_t blockSize) {
   Serial.println(F("[SEND][COAP][WELL_KNOWN]"));  
   
-  char response;
+  builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
 
@@ -1138,11 +1114,9 @@ void sendWellKnownContentResponse(IPAddress ip, uint16_t portNumber, char* token
 
   setWellKnownCorePayload(blockNumber, blockSize);
 
-  /* stwórz wiadomość zwrotną */
-  response = builder.build();
 
   /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(response, ip , portNumber);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), ip , portNumber);
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem oraz opcjami ETAG, OBSERVE:
@@ -1162,7 +1136,7 @@ void sendWellKnownContentResponse(IPAddress ip, uint16_t portNumber, char* token
       (sesja przestanie być aktywna w momencie otrzymania potwierdzenia ACK z tym samym messageId);
 */
 void sendContentResponseWithEtag(Session* session) {
-  char response;
+  builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_CON);
 
@@ -1179,11 +1153,8 @@ void sendContentResponseWithEtag(Session* session) {
   //TODO zalezc
   builder.setPayload(session->etag.savedValue);
 
-  /* stwórz wiadomość zwrotną */
-  response = builder.build();
-
   /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(response, session->ipAddress, session->portNumber);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
 }
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta z kodem 2.03 VALID, opcją Etag, Observe oraz bez payloadu.
@@ -1203,7 +1174,7 @@ void sendContentResponseWithEtag(Session* session) {
       (sesja przestanie być aktywna w momencie otrzymania potwierdzenia ACK z tym samym messageId);
 */
 void sendValidResponse(Session* session) {
-  char response;
+  builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_CON);
 
@@ -1218,11 +1189,8 @@ void sendValidResponse(Session* session) {
   builder.setOption(ETAG, session->etag.etagId);
   builder.setOption(OBSERVE, ++observeCounter);
 
-  /* stwórz wiadomość zwrotną */
-  response = builder.build();
-
   /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(response, session->ipAddress, session->portNumber);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
 }
 
 void setWellKnownCorePayload(uint16_t blockNumber, uint8_t blockSize) {
@@ -1324,7 +1292,7 @@ void getMessageFromThing(byte message) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
         // aktualizujemy zawartość value w zasobie
-        byteArrayCopy(resources[resourceNumber].value, (message & 0x07));
+        strcpy(resources[resourceNumber].value, (message & 0x07));
 
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy

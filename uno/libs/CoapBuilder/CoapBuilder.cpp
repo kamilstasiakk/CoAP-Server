@@ -143,7 +143,6 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   _lastOptionNum = optionNumber;
   uint8_t optNumOffset = 0;
   uint8_t optLenOffset = 0;
-  
 
   if (message[_lastOptionStart] != '\0') //there was some option set
   {
@@ -154,43 +153,7 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   
   //writing option number 
   if (optionNumber < 13) {
-	  Serial.println(optionNumber);
-	  Serial.println((optionNumber << 4),BIN);
-	  Serial.println(optionNumber);
-	  Serial.println(message[_lastOptionStart],BIN);
-	  
-	  
-	  byte one = (optionNumber << 4);
-	  char two = (optionNumber << 4);
-	  uint8_t three = (optionNumber << 4);
-	  
-	  Serial.println(one,BIN);
-	  Serial.println(two,BIN);
-	  Serial.println(three,BIN);
-	  
-	  Serial.println(optionNumber);
-	  
-	  char cos = 192;
-	  Serial.println(cos,BIN);
-	  cos = 127;
-	  Serial.println(cos,BIN);
-	  cos = 128;
-	  Serial.println(cos,BIN);
-	  cos = 129;
-	  Serial.println(cos,BIN);
-	  
-	  
-	  
-	  message[_lastOptionStart] = cos;
-	  Serial.println(message[_lastOptionStart],BIN);
-	  
-	  //char cos2 = (12*16);
-	  //message[_lastOptionStart] = cos2;
-	  //Serial.println(message[_lastOptionStart],BIN);
-	  
-	  
-	  Serial.println(message[_lastOptionStart],BIN);
-	  Serial.println(message[4],BIN);
+	  message[_lastOptionStart] = (optionNumber << 4);
   } else if (optionNumber < 269){
       message[_lastOptionStart] = (13 << 4);
       message[_lastOptionStart + 1] = (optionNumber - 13);
@@ -225,17 +188,6 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
     message[_lastOptionStart + 2 + optNumOffset] = (_lastOptionLen - 269) & 0x00ff;
     optLenOffset = 2;
   }
-  
-  
-    Serial.println(F("**[BUILDER][setOptions]:Option length"));
-	Serial.println(message[_lastOptionStart]);
-	Serial.println(message[0],BIN);
-	Serial.println(message[1],BIN);
-	Serial.println(message[2],BIN);
-	Serial.println(message[3],BIN);
-	Serial.println(message[4],BIN);
-	Serial.println(F("**[BUILDER][setOptions]:Option length"));
-  
   
   //auxiliary adding to deacrease adding operations in for loop
   _lastOptionStart += optNumOffset + optLenOffset + 1;
@@ -275,12 +227,15 @@ void CoapBuilder::setPayload(char* value)
   _payloadLen = strlen(value);
   
   
-//   Serial.println(F("**[BUILDER][setPayload1]:Hole Message"));	
-//	size_t messageSizeTMP = strlen(message);
-//	for(int i = 0; i< messageSizeTMP; i++){
-//		Serial.println(message[i],BIN);
-//	}	
-//	Serial.println(F("**[BUILDER][setPayload1]:END"));
+   Serial.println(F("**[BUILDER][setPayload1]:Hole Message"));	
+	Serial.println(message[0],BIN);
+	Serial.println(message[1],BIN);
+	Serial.println(message[2],BIN);
+	Serial.println(message[3],BIN);
+	Serial.println(message[4],BIN);	
+	Serial.println(message[5],BIN);
+	Serial.println(message[6],BIN);		
+	Serial.println(F("**[BUILDER][setPayload1]:END"));
 }
 
 void CoapBuilder::setPayload(char* value, uint8_t start)
@@ -294,13 +249,6 @@ void CoapBuilder::setPayload(char* value, uint8_t start)
   }
   message[messageLen + i] = '\0';
   _payloadLen = strlen(value);
-  
-//     Serial.println(F("**[BUILDER][setPayload2]:Hole Message"));	
-//	size_t messageSizeTMP = strlen(message);
-//	for(int i = 0; i< messageSizeTMP; i++){
-//		Serial.println(message[i],BIN);
-//	}	
-//	Serial.println(F("**[BUILDER][setPayload2]:END"));
 }
 
 //append string to payload
@@ -362,6 +310,10 @@ byte* CoapBuilder::build()
   return message;
 }
 
+size_t CoapBuilder::getResponseSize()
+{
+	return byteArrayLen(message);
+}
 
 /*
  * zwraca: 
@@ -410,7 +362,7 @@ void CoapBuilder::byteArrayCat(byte* to, byte* from) {
     number++; 
   }
   while (1) {
-    a[number] = b[numberFrom];
+    to[number] = from[numberFrom];
     if (from[numberFrom] == 0) {
       return;
     }

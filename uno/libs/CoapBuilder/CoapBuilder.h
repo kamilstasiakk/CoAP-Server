@@ -45,6 +45,7 @@ class CoapBuilder
 	void appendPayload(char* value, uint8_t start, uint8_t end);
 	void flushPayload();
 	uint8_t getPayloadLen();
+	size_t getResponseSize();
     byte* build(); 
     byte* buildAckHeader();
 
@@ -55,6 +56,7 @@ class CoapBuilder
     uint8_t _lastOptionNum;
 	uint8_t _payloadLen;
     void setTokenLen(uint8_t value);
+	int8_t byteArrayCompere(byte* a, byte* b);
     void byteArrayCopy(byte* to, byte* from);
 	void byteArrayCat(byte* to, byte* from);
 	uint8_t byteArrayLen(byte* a);
