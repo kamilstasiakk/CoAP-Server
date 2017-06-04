@@ -12,7 +12,7 @@ class CoapBuilder
 {
   public:
     static const int MAX_MESSAGE_LENGHT = 85;
-    char message[MAX_MESSAGE_LENGHT];
+    byte message[MAX_MESSAGE_LENGHT];
     
     CoapBuilder();
     /*set fields as default
@@ -45,8 +45,8 @@ class CoapBuilder
 	void appendPayload(char* value, uint8_t start, uint8_t end);
 	void flushPayload();
 	uint8_t getPayloadLen();
-    char* build(); 
-    char* buildAckHeader();
+    byte* build(); 
+    byte* buildAckHeader();
 
   private:
     
@@ -54,7 +54,9 @@ class CoapBuilder
     uint8_t _lastOptionLen; // Option length with option header
     uint8_t _lastOptionNum;
 	uint8_t _payloadLen;
-    void  setTokenLen(uint8_t value);
-    
+    void setTokenLen(uint8_t value);
+    void byteArrayCopy(byte* to, byte* from);
+	void byteArrayCat(byte* to, byte* from);
+	uint8_t byteArrayLen(byte* a);
 };
 #endif

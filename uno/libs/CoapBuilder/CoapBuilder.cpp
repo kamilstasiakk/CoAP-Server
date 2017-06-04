@@ -109,7 +109,7 @@ void CoapBuilder::setToken(char* value)
 {
   uint8_t tokenLen = (uint8_t) strlen(value);
   setTokenLen(tokenLen);
-  uint8_t  messageLen = strlen(message);
+  uint8_t  messageLen = byteArrayLen(message);
   //shift if options or payload are set
   if (messageLen > 4) {
     //from message[messageLen - 1 + tokenLen] = message[messageLen - 1]
@@ -128,7 +128,7 @@ void CoapBuilder::setToken(char* value)
   }
   
 	Serial.println(F("**[BUILDER][setToken]:Hole Message"));	
-	size_t messageSizeTMP = strlen(message);
+	size_t messageSizeTMP = byteArrayLen(message);
 	for(int i = 0; i< messageSizeTMP; i++){
 		Serial.println(message[i],BIN);
 	}	
@@ -265,7 +265,7 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
 void CoapBuilder::setPayload(char* value)
 {
   uint8_t i;
-  uint8_t messageLen = strlen(message);
+  uint8_t messageLen = byteArrayLen(message);
   //adding payload marker
   message[messageLen ++] = 255;
   for (i = 0; i < strlen(value); i++) {
@@ -286,7 +286,7 @@ void CoapBuilder::setPayload(char* value)
 void CoapBuilder::setPayload(char* value, uint8_t start)
 {
   uint8_t i;
-  uint8_t messageLen = strlen(message);
+  uint8_t messageLen = byteArrayLen(message);
   //adding payload marker
   message[messageLen ++] = 255;
   for (i = start; i < strlen(value); i++) {
@@ -306,7 +306,7 @@ void CoapBuilder::setPayload(char* value, uint8_t start)
 //append string to payload
 void CoapBuilder::appendPayload(char* value) {
 	uint8_t i;
-  uint8_t messageLen = strlen(message);
+  uint8_t messageLen = byteArrayLen(message);
   for (i = 0; i < strlen(value); i++) {
     message[messageLen + i] = value[i];
   }
@@ -316,7 +316,7 @@ void CoapBuilder::appendPayload(char* value) {
 
 void CoapBuilder::appendPayload(char* value, uint8_t len) {
 	uint8_t i;
-  uint8_t messageLen = strlen(message);
+  uint8_t messageLen = byteArrayLen(message);
   for (i = 0; i < len; i++) {
     message[messageLen + i] = value[i];
   }
@@ -326,7 +326,7 @@ void CoapBuilder::appendPayload(char* value, uint8_t len) {
 
 void CoapBuilder::appendPayload(char* value, uint8_t start, uint8_t end) {
 	uint8_t i;
-  uint8_t messageLen = strlen(message);
+  uint8_t messageLen = byteArrayLen(message);
   for (i = start; i < end; i++) {
     message[messageLen + i] = value[i];
   }
@@ -337,7 +337,7 @@ void CoapBuilder::appendPayload(char* value, uint8_t start, uint8_t end) {
 void CoapBuilder::flushPayload() {
 	_payloadLen = 0;
 		uint8_t i;
-  for (i = 0; i < strlen(message); i++) {
+  for (i = 0; i < byteArrayLen(message); i++) {
     if (message[i] == 255) {
 		message[i] = '\0';
 		return;
@@ -349,7 +349,7 @@ uint8_t CoapBuilder::getPayloadLen() {
 	return _payloadLen;
 }
 
-char* CoapBuilder::build()
+byte* CoapBuilder::build()
 {
 	
 //	   Serial.println(F("**[BUILDER][build]:Hole Message"));	
@@ -361,4 +361,71 @@ char* CoapBuilder::build()
 	
   return message;
 }
+
+
+/*
+ * zwraca: 
+ * 0 gdy są równe
+ * 1 w przeciwnym wypadku
+ * bajtów używamy jako rozszerzonych ASCII (aby mogly miec wartosc 0<x<256
+ * byte owartosci 0 oznacza to samo co '\0' dla ascii
+ */
+int8_t CoapBuilder::byteArrayCompere(byte* a, byte* b) {
+  uint8_t number = 0;
+  while (1) {
+    if (a[number] == 0) {
+      if (b[number] == 0) {
+        return 0;
+      } else {
+        return 1;
+      }
+    }
+    if (b[number] == 0) {
+        return 1;
+    }
+    if (b[number] != a[number]) {
+        return 1;
+    }
+  }
+  number++;
+}
+
+//kopiuje zawartosc tablicy from do tablicy to
+void CoapBuilder::byteArrayCopy(byte* to, byte* from) {
+  uint8_t number = 0;
+  while (1) {
+    to[number] = from[number];
+    if (from[number] == 0) {
+      return;
+    }
+    number++;
+  }
+}
+
+
+void CoapBuilder::byteArrayCat(byte* to, byte* from) {
+  uint8_t number = 0;
+  uint8_t numberFrom = 0;
+  while (to[number] != 0) {
+    number++; 
+  }
+  while (1) {
+    a[number] = b[numberFrom];
+    if (from[numberFrom] == 0) {
+      return;
+    }
+    number++;
+    numberFrom++;
+  }
+}
+
+
+uint8_t CoapBuilder::byteArrayLen(byte* a) {
+  uint8_t number = 0;
+  while (a[number] != 0) {
+    number++; 
+  }
+  return number;
+}
+
 
