@@ -29,82 +29,82 @@ void CoapBuilder::init()
 void CoapBuilder::setVersion(uint8_t value)
 {
  
-	Serial.println(F("**[BUILDER][setVersion]:"));
-	Serial.println(message[0] & 0x3f);
-	Serial.println((value & 0x03) << 6);
+//	Serial.println(F("**[BUILDER][setVersion]:"));
+//	Serial.println(message[0] & 0x3f);
+//	Serial.println((value & 0x03) << 6);
 	
 	  message[0] = (message[0] & 0x3f) + ((value & 0x03) << 6);
 	
-	Serial.println(message[0],BIN);
-	Serial.println(F("**[BUILDER][setVersion]:END"));
+//	Serial.println(message[0],BIN);
+//	Serial.println(F("**[BUILDER][setVersion]:END"));
 	
 
 }
 
 void CoapBuilder::setType(uint8_t value)
 {
-  	Serial.println(F("**[BUILDER][setType]:"));
-	Serial.println(message[0] & 0xcf);
-	Serial.println((value & 0x03) << 4);
+//  	Serial.println(F("**[BUILDER][setType]:"));
+//	Serial.println(message[0] & 0xcf);
+//	Serial.println((value & 0x03) << 4);
 	
 	    message[0] = (message[0] & 0xcf) + ((value & 0x03) << 4);
 	
 	
-	Serial.println(message[0],BIN);
-	Serial.println(F("**[BUILDER][setType]:END"));
+//	Serial.println(message[0],BIN);
+//	Serial.println(F("**[BUILDER][setType]:END"));
 }
 
 void  CoapBuilder::setTokenLen(uint8_t value)
 {
-    Serial.println(F("**[BUILDER][setTokenLen]:"));
-	Serial.println(message[0] & 0xf0);
-	Serial.println(value & 0x0f);
+//    Serial.println(F("**[BUILDER][setTokenLen]:"));
+//	Serial.println(message[0] & 0xf0);
+//	Serial.println(value & 0x0f);
 	
 	message[0] = (message[0] & 0xf0) + (value & 0x0f);
 	
-	Serial.println(message[0],BIN);
-	Serial.println(F("**[BUILDER][setTokenLen]:END"));
+//	Serial.println(message[0],BIN);
+//	Serial.println(F("**[BUILDER][setTokenLen]:END"));
 	_messageLen += value;
 }
 
 void CoapBuilder::setCodeClass(uint8_t value)
 {
-    Serial.println(F("**[BUILDER][setCodeClass]:"));
-	Serial.println(message[1] & 0x1f);
-	Serial.println((value & 0x07) << 5);
+//    Serial.println(F("**[BUILDER][setCodeClass]:"));
+//	Serial.println(message[1] & 0x1f);
+//	Serial.println((value & 0x07) << 5);
 
 	message[1] = (message[1] & 0x1f) + ((value & 0x07) << 5); 
 
-	Serial.println(message[1],BIN);
-	Serial.println(F("**[BUILDER][setCodeClass]:END")); 	
+//	Serial.println(message[1],BIN);
+//	Serial.println(F("**[BUILDER][setCodeClass]:END")); 	
 }
 
 void CoapBuilder::setCodeDetail(uint8_t value)
 {
-    Serial.println(F("**[BUILDER][setCodeDetail]:"));
-	Serial.println(message[1],BIN);
-	Serial.println(message[1] &  0xe0);
-	Serial.println(value & 0x1f);
+//    Serial.println(F("**[BUILDER][setCodeDetail]:"));
+//	Serial.println(message[1],BIN);
+//	Serial.println(message[1] &  0xe0);
+//	Serial.println(value & 0x1f);
 	
 	message[1] = (message[1] &  0xe0) + (value & 0x1f);
 	
-	Serial.println(message[1],BIN);
-	Serial.println(F("**[BUILDER][setCodeDetail]:END")); 
+//	Serial.println(message[1],BIN);
+//	Serial.println(F("**[BUILDER][setCodeDetail]:END")); 
 }
 
 void CoapBuilder::setMessageId(uint16_t value)
 { 
-    Serial.println(F("**[BUILDER][setMessageId]:"));
-	Serial.println(value & 0xff00);
-	Serial.println((value & 0xff00) >> 8);
-	Serial.println(value & 0x00ff);
+//    Serial.println(F("**[BUILDER][setMessageId]:"));
+//	Serial.println(value & 0xff00);
+//	Serial.println((value & 0xff00) >> 8);
+//	Serial.println(value & 0x00ff);
 
   message[2] = (value & 0xff00) >> 8;
   message[3] = value & 0x00ff;	
   
-  	Serial.println(message[2],BIN);
-	Serial.println(message[3],BIN);
-	Serial.println(F("**[BUILDER][setMessageId]:END"));
+ // 	Serial.println(message[2],BIN);
+//	Serial.println(message[3],BIN);
+//	Serial.println(F("**[BUILDER][setMessageId]:END"));
 }
 
 void CoapBuilder::setToken(char* value)
@@ -128,17 +128,16 @@ void CoapBuilder::setToken(char* value)
     message[4 + i] = value[i];
   }
   
-	Serial.println(F("**[BUILDER][setToken]:Hole Message"));	
-	for(int i = 0; i< _messageLen; i++){
-		Serial.println(message[i],BIN);
-	}	
-	Serial.println(F("**[BUILDER][setToken]:END"));
+	//Serial.println(F("**[BUILDER][setToken]:Hole Message"));	
+//	Serial.println(F("***[BUILDER][setToken]:END"));
 }
 
 //to simplyfy operating rising option adding order is required
 //payload must be set after options too
 void CoapBuilder::setOption(uint32_t optionNumber, char* value)
 {
+//	Serial.println(value[0],BIN);
+//	Serial.println(strlen(value));
   _lastOptionLen = strlen(value);
   _lastOptionNum = optionNumber;
   uint8_t optNumOffset = 0;
@@ -148,7 +147,7 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   {
     optionNumber -= _lastOptionNum;
     _lastOptionStart += _lastOptionLen;
-	 Serial.println("tak");
+//	 Serial.println(F("tak"));
   }
   
   //writing option number 
@@ -168,14 +167,14 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
 	_messageLen += _lastOptionLen + 3;
   } 
   
-    Serial.println(F("**[BUILDER][setOptions]:Option nubber"));
-	Serial.println(_lastOptionStart);
-	Serial.println(message[0],BIN);
-	Serial.println(message[1],BIN);
-	Serial.println(message[2],BIN);
-	Serial.println(message[3],BIN);
-	Serial.println(message[4],BIN);
-	Serial.println(F("**[BUILDER][setOptions]:Option nubberEND"));
+//    Serial.println(F("**[BUILDER][setOptions]:Option nubber"));
+//	Serial.println(_lastOptionStart);
+//	Serial.println(message[0],BIN);
+//	Serial.println(message[1],BIN);
+//	Serial.println(message[2],BIN);
+//	Serial.println(message[3],BIN);
+//	Serial.println(message[4],BIN);
+//	Serial.println(F("**[BUILDER][setOptions]:Option nubberEND"));
   
   
   //writing option length 
@@ -197,9 +196,17 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   //auxiliary adding to deacrease adding operations in for loop
   _lastOptionStart += optNumOffset + optLenOffset + 1;
   //writing the value of option
-  for (uint8_t i = 0; i < _lastOptionLen; i++) {
-    message[_lastOptionStart + i] = value[i]; 
-  }
+//  for (uint8_t i = 0; i < _lastOptionLen; i++) {
+//    message[_lastOptionStart + i] = value[i] - '0'; 
+//	Serial.println(_lastOptionStart + i);
+//	Serial.println(value[i]);
+//	Serial.println(value[0]);
+//	Serial.println(value[1]);
+//	Serial.println(*value);
+//	Serial.println(value);
+//	Serial.println(_lastOptionLen);
+//	Serial.println(F("add value"));
+//  }
   //ending message
   message[_lastOptionStart + _lastOptionLen] = '\0';
   
@@ -209,37 +216,47 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   _lastOptionLen += optNumOffset + optLenOffset + 1;
   
   
-  	Serial.println(F("**[BUILDER][setOptions]:Hole Message"));	
-	Serial.println(message[0],BIN);
-	Serial.println(message[1],BIN);
-	Serial.println(message[2],BIN);
-	Serial.println(message[3],BIN);
-	Serial.println(message[4],BIN);	
-	Serial.println(F("**[BUILDER][setOptions]:END"));
+//  	Serial.println(F("**[BUILDER][setOptions]:Hole Message"));	
+//	Serial.println(message[0],BIN);
+//	Serial.println(message[1],BIN);
+//	Serial.println(message[2],BIN);
+//	Serial.println(message[3],BIN);
+//	Serial.println(message[4],BIN);	
+//	Serial.println(message[5],BIN);	
+//	Serial.println(F("**[BUILDER][setOptions]:END"));
 }
 
 //payload must be set after setting options
 void CoapBuilder::setPayload(char* value)
 {
-  uint8_t i;
+  uint8_t i;	
   //adding payload marker
   message[_messageLen ++] = 255;
+  
+ // Serial.println(strlen(value));
+  
+  
   for (i = 0; i < strlen(value); i++) {
     message[_messageLen + i] = value[i];
   }
-  message[_messageLen + i] = '\0';
+  _messageLen += strlen(value);
+  
+  //message[_messageLen++] = '\0';
   _payloadLen = strlen(value);
+//  Serial.println(_messageLen);
   
-  
-   Serial.println(F("**[BUILDER][setPayload1]:Hole Message"));	
-	Serial.println(message[0],BIN);
-	Serial.println(message[1],BIN);
-	Serial.println(message[2],BIN);
-	Serial.println(message[3],BIN);
-	Serial.println(message[4],BIN);	
-	Serial.println(message[5],BIN);
-	Serial.println(message[6],BIN);		
-	Serial.println(F("**[BUILDER][setPayload1]:END"));
+//   Serial.println(F("**[BUILDER][setPayload1]:Hole Message"));	
+//	Serial.println(message[0],BIN);
+//	Serial.println(message[1],BIN);
+//	Serial.println(message[2],BIN);
+//	Serial.println(message[3],BIN);
+//	Serial.println(message[4],BIN);	
+//	Serial.println(message[5],BIN);
+//	Serial.println(message[6],BIN);
+//	Serial.println(message[7],BIN);
+//	Serial.println(message[8],BIN);
+//	Serial.println(message[9],BIN);
+//	Serial.println(F("**[BUILDER][setPayload1]:END"));
 }
 
 void CoapBuilder::setPayload(char* value, uint8_t start)

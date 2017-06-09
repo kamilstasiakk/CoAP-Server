@@ -90,11 +90,10 @@ char* CoapParser::parseToken(char* message, uint8_t tokenLen)
       fieldValue[byteNumber] = message[4+byteNumber];
    }
    fieldValue[byteNumber] = '\0';
-   Serial.println(fieldValue);
    
-   	Serial.println(F("--[PARSER][parseToken]:"));
-	Serial.println(fieldValue);
-	Serial.println(F("--[PARSER][parseToken]:END"));
+//   	Serial.println(F("--[PARSER][parseToken]:"));
+//	Serial.println(fieldValue);
+//	Serial.println(F("--[PARSER][parseToken]:END"));
    
    return fieldValue;
 }
@@ -155,12 +154,6 @@ uint8_t CoapParser::getNextOption(char* message) {
       offset = computeOptLenOffset(optionLen);
       for (i = 0; i < optionLen; i++) {
         fieldValue[i] = message[_currentOptionStart + 1 + offset + i];
-		
-	Serial.println(F("--[PARSER][option]:"));
-	Serial.println(message[_currentOptionStart + 1 + offset + i],BIN);
-	Serial.println(fieldValue[i]);
-	Serial.println(F("--[PARSER][options]:END"));
-		
       }
       fieldValue[i] = '\0';
       _currentOptionStart += 1 + optionLen + offset;

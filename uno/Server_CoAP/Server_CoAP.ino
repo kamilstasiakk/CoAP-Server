@@ -91,42 +91,42 @@ void initializeResourceList() {
   resources[0].uri = ".well-known/core";
   resources[0].resourceType = "";
   resources[0].interfaceDescription = "";
-  strcpy(resources[5].value, "0");
+  resources[0].value = 0 ;
   resources[0].flags = B00000000;
   
   // lampka
   resources[1].uri = "sensor/lamp";
   resources[1].resourceType = "Lamp";
   resources[1].interfaceDescription = "state";
-  strcpy(resources[0].value, '0'); //OFF
+  resources[1].value = 12 ; //OFF
   resources[1].flags = B00000010;
 
   // przycisk
   resources[2].uri = "sensor/button";
   resources[2].resourceType = "Button";
   resources[2].interfaceDescription = "state";
-  strcpy(resources[1].value, '0');
+  resources[2].value = 0;
   resources[2].flags = B00000101;
 
   // metryka PacketLossRate
   resources[3].uri = "metric/PLR";
   resources[3].resourceType = "PacketLossRate";
   resources[3].interfaceDescription = "value";
-  strcpy(resources[2].value, "0"); //OFF
+  resources[3].value = 0 ;
   resources[3].flags = B00000000;
 
   // metryka ByteLossRate
   resources[4].uri = "metric/BLR";
   resources[4].resourceType = "ByteLossRate";
   resources[4].interfaceDescription = "value";
-  strcpy(resources[4].value, "0");
+  resources[4].value = 0 ;
   resources[4].flags = B00000000;
 
   // metryka MeanAckDelay
   resources[5].uri = "metric/MAD";
   resources[5].resourceType = "MeanACKDelay";
   resources[5].interfaceDescription = "value";
-  strcpy(resources[5].value, "0");
+  resources[5].value = 0 ;
   resources[5].flags = B00000000;
 
   // wysyłamy wiadomości żądające podania aktualnego stanu zapisanych zasobów
@@ -205,13 +205,6 @@ void sendEthernetMessage(byte* message,size_t messageSize, IPAddress ip, uint16_
   Udp.beginPacket(ip, port);
   int r = Udp.write(message, messageSize);
   Udp.endPacket();
-  
-  Serial.println(F("[SEND][ETH]->message:"));
-//  for(int i =0; i<messageSize; i++){
-//    Serial.println(message[i],BIN);
-//  }
-  Serial.println(F("[SEND][ETH]->fin:"));
-
   //jeżeli liczba danych przyjętych do wysłania przez warstwę niższą jest mniejsza niż rozmiar wiadomości to?
   if ( r < messageSize ) {
 
@@ -374,7 +367,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   }
 
   Serial.println(F("[RECEIVE][COAP][GET]->URI_Path option"));
-  Serial.println(uriPath);
+  //Serial.println(uriPath);
 
   
   /* przeglądamy dalsze opcje wiadomości w celu odnalezienia opcji ACCEPT */
@@ -721,6 +714,8 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
       /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
       /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
       Serial.println(F("[RECEIVE][COAP][GET]->Only Uri Path"));
+      Serial.println(resources[resourceNumber].value);
+
       
       char charValue[2];
       getCharValueFromResourceValue(charValue,resources[resourceNumber].value,0);
@@ -743,12 +738,14 @@ void getCharValueFromResourceValue(char* charValue,unsigned long value, uint16_t
   switch (requestedType) {
           case 0:
             /* plain-text */
-            if (value < 10 ){
+            if (value > 10){
+              charValue[0] = value/10 + '0';
+              charValue[1] = (value % 10) + '0';
+            } else {
               charValue[0] = value + '0';
-              charValue[1] = '\0';
+              charValue[1] = '\0';           
             }
-            else {
-            }
+
             break;
 //          case 50:
 //            /* j-son */
@@ -1052,9 +1049,6 @@ void sendAckResponse(Session* session) {
 void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, char* payloadValue, bool addObserveOption) {
   
   Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->token/payload/observeOption"));
-  Serial.println(tokenValue);
-  Serial.println(payloadValue);
-  Serial.println(addObserveOption);
   
   /* wyślij utworzoną wiaodmość zwrotną */
   /* kod wiaodmości 2.05 CONTENT */
@@ -1071,11 +1065,10 @@ void sendContentResponse(IPAddress ip, uint16_t portNumber, char* tokenValue, ch
     builder.setOption(OBSERVE, ++observeCounter);
   }
   
-  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
-  builder.setPayload(payloadValue);
+  builder.setOption(CONTENT_FORMAT, "0" +'\0');
+  builder.setPayload("12" + '\0');
 
   /* wyślij utworzoną wiaodmość zwrotną */
-  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->"));
   Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->END")); 
   
   sendEthernetMessage(builder.build(), builder.getResponseSize(), ip , portNumber);
@@ -1094,11 +1087,12 @@ void sendWellKnownContentResponse(IPAddress ip, uint16_t portNumber, char* token
   /* kod wiaodmości 2.05 CONTENT */
   builder.setCodeClass(CLASS_SUC);
   builder.setCodeDetail(5);
-
-  builder.setToken(tokenValue);
+  
   builder.setMessageId(0);
+  builder.setToken(tokenValue);
 
-  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
+  builder.setOption(CONTENT_FORMAT, "0"+'\0');
+  Serial.println(F("[SEND][COAP][WELL_KNOWN]option"));  
   /*narazie zakładamy ze bloki beda 64bitowe, wiec blokow w naszym przypadku zawsze bedzie mniej niz 16 ((blockNumber & 0x0f) << 4) 
    * cztery najstrasze bity okreslaja numer bloku,
    * 3 najmlodsze okreslaja rozmiar bloku
