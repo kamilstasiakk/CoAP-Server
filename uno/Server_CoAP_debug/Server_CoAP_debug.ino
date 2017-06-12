@@ -1,4 +1,4 @@
-
+ 
 
 #include <Resources.h>
 #include <CoapParser.h>
@@ -138,7 +138,6 @@ void initializeResourceList() {
 
 
 // RF24:Methodes--------------------------------
-
 /*
     Metoda odpowiedzialna za odebranie danych dopóki są one dostepne na interfejsie radiowym.
 */
@@ -163,7 +162,6 @@ void sendRF24Message(byte message) {
 
 
 // START:Ethernet_Methodes----------------------------
-
 /*
     Metoda odpowiedzialna za odbieranie wiadomości z interfejsu ethernetowego
     - jeżeli pakiet ma mniej niż 4 bajty (minimalną wartośc nagłówka) to odrzucamy go;
@@ -254,11 +252,11 @@ void getCoapClienMessage() {
   Serial.println(F("[RECEIVE][COAP]->END Message"));
 
   if (parser.parseVersion(ethMessage) != 1) {
-    sendErrorResponse(remoteIp, remotePortNumber, ethMessage, BAD_REQUEST, "WRONG VERSION TYPE");
+    sendErrorResponse(BAD_REQUEST, "WRONG VERSION TYPE");
     return;
   }
   else if ( parser.parseCodeClass(ethMessage) != CLASS_REQ) {
-    sendErrorResponse(remoteIp, remotePortNumber, ethMessage, BAD_REQUEST, "WRONG CLASS TYPE");
+    sendErrorResponse(BAD_REQUEST, "WRONG CLASS TYPE");
     return;
   }
 
@@ -282,14 +280,13 @@ void getCoapClienMessage() {
       }
       break;
     default:
-      sendErrorResponse(remoteIp, remotePortNumber, ethMessage, BAD_REQUEST, "WRONG DETAIL CODE");
+      sendErrorResponse(BAD_REQUEST, "WRONG DETAIL CODE");
       return;
   }
 
   /* wyślij błąd oznaczający zły typ widomości do danego kodu detail */
-  sendErrorResponse(remoteIp, remotePortNumber, ethMessage, BAD_REQUEST, "WRONG TYPE OF MESSAGE");
+  sendErrorResponse(BAD_REQUEST, "WRONG TYPE OF MESSAGE");
 }
-
 /*
     Metoda odpowiedzialna za analizę wiadomości typu GET:
     Możliwe opcje: OBSERV(6), URI-PATH(11), ACCEPT(17), ETAG(4);
@@ -327,8 +324,10 @@ void receiveGetRequest() {
 
   char etagOptionValues[ETAG_MAX_OPTIONS_COUNT][8];
   int etagValueNumber = 0;
-  uint8_t etagCounter = "";  // JAK ZROBIC TO NA LISCIE ABY MOC ROBIC KILKA ETAGOW
+  uint8_t etagCounter = "";
+  
   uint8_t observeOptionValue = 2; // klient może wysłac jedynie 0 lub 1
+  
   char uriPath[20] = "";
   uint8_t acceptOptionValue = 0;
   uint8_t blockOptionValue = 255;
@@ -340,21 +339,28 @@ void receiveGetRequest() {
   Serial.println(optionNumber);
 
   if ( optionNumber != URI_PATH ) {
-    if ( optionNumber > URI_PATH ) {
-      /* pierwsza opcja ma numer większy niż URI-PATH - brak wskazania zasobu */
-      sendErrorResponse(remoteIp, remotePortNumber, ethMessage, BAD_REQUEST, "NO URI");
+    if ( optionNumber > URI_PATH || optionNumber == NO_OPTION) {
+      /* pierwsza opcja ma numer większy niż URI-PATH lub wiadomośc jest bez opcji - brak wskazania zasobu */
+      sendErrorResponse(BAD_REQUEST, "NO URI");
       return;
     }
     else {
       /* szukamy opcji Etag oraz Observe */
-      while ( optionNumber != URI_PATH ) {
+      while ( optionNumber != URI_PATH && optionNumber != NO_OPTION) {
         optionNumber = parser.getNextOption(ethMessage, messageLen);
       } // end of while loop
     } // end of else
   } // end of if (firstOption != URI_PATH)
 
   /* odczytujemy wartość URI-PATH */
-  strcpy(uriPath, parser.fieldValue);
+  if ( optionNumber != NO_OPTION ) {
+    strcpy(uriPath, parser.fieldValue);
+  }
+  else {
+    /* wiadomość nie zawierala opcji URI_PATH */
+    sendErrorResponse(BAD_REQUEST, "NO URI");
+    return;
+  }
 
   optionNumber = parser.getNextOption(ethMessage, messageLen);
   while (optionNumber == URI_PATH) {
@@ -374,14 +380,14 @@ void receiveGetRequest() {
     if ( optionNumber == ACCEPT ) {
       /* wystąpiła opcja ACCEPT, zapisz jej zawartość */
       acceptOptionValue = parser.fieldValue[0];
+
       Serial.println(F("[RECEIVE][COAP][GET]->Accpet option"));
       Serial.println(acceptOptionValue);
+      
       if (acceptOptionValue != 0) {
-        sendErrorResponse(remoteIp, remotePortNumber, ethMessage, BAD_REQUEST, "BAD accept value: only text/plain allowed");
+        sendErrorResponse(BAD_REQUEST, "BAD accept value: only text/plain allowed");
         return;
       }
-
-
     }
     if ( optionNumber == BLOCK2 ) {
       /* wystąpiła opcja BLOCK2, zapisz jej zawartość */
@@ -405,10 +411,8 @@ void receiveGetRequest() {
       sendWellKnownContentResponse(0x02);//zadanie 0-wego bloku o dlugosc 64B
     } else {
       sendWellKnownContentResponse(blockOptionValue);
-    }
-    
+    }  
   } else {
-
     /*----analiza wiadomości---- */
     /* szukamy wskazanego zasobu na serwerze */
     for (uint8_t resourceNumber = 1; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
@@ -421,56 +425,18 @@ void receiveGetRequest() {
         /* zmienne mówiące o pozycji w listach */
         uint8_t observatorIndex = MAX_OBSERVATORS_COUNT + 1;
         uint8_t etagIndex = MAX_ETAG_COUNT + 1;
-
-
-
-        /*-------analiza wiadomości z opcją acccept------------------------------------------------------------------------------*/
-        if ( acceptOptionValue == 0 ) {
-          Serial.println(F("[RECEIVE][COAP][GET]->Accept:"));
-          switch (acceptOptionValue) {
-            case 0:
-              /* plain-text */
-              break;
-            case 50:
-              /* j-son */
-              // DOROBIĆ
-              break;
-            default:
-              /* wyślij odpowiedz z kodem błedu 4.06 Not acceptable */
-              sendErrorResponse(remoteIp, remotePortNumber, ethMessage, NOT_ACCEPTABLE, "UNKNOWN ACCEPT VALUE");
-              break;
-          }
-
-          if ( observeOptionValue != 2 ) {
-            /* analiza wiadomości z opcjami accept + observe + URI_PATH */
-          }
-
-          /* analiza wiadomości z opcją accept + URI_PATH */
-        }
-        /*-------koniec analizy wiadomości z opcją acccept-----------------------------------------------------------------------*/
-
-        /*-----analiza wiadomości z opcją observe i URI_PATH----------------------------------------------------------*/
-        if ( observeOptionValue != 2 ) {
-          /* wyslij wiadomosc 2.05 NON content wraz z opcją observe */
-          //sendContentResponse(remoteIp, remotePortNumber, observators[observatorIndex].token, getCharValueFromResourceValue(resources[resourceNumber].value, 0), true);
-          // return;
-        }
-        /*-----koniec analizy wiadomości z opcją observe i URI_PATH-------------------------------------------------- */
-
-
+        
         /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
-        /* wyslij wiadomość NON 2.05 content bez opcji, z samym paylodem w dowolnej dostępnej formie */
+        /* wyslij wiadomość NON 2.05 content z opcja CONTENT_TYPE zgodną z accept lub domyślną */
         Serial.println(F("[RECEIVE][COAP][GET]->Only Uri Path"));
         Serial.println(resources[resourceNumber].value);
-        /*
-           Block value processing
-        */
+        
+        /*           Block value processing        */
         if (blockOptionValue != 255) { // inne wartosci sa krótsze od 16B
           sendContentResponse(resourceNumber , false, (blockOptionValue & 0x07));
         } else {
           sendContentResponse(resourceNumber , false, 255);
         }
-
         return;
         /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
 
@@ -480,8 +446,7 @@ void receiveGetRequest() {
     /* nie znaleziono zasobu na serwerze */
     /* wiadomość zwrotna zawierająca kod błedu 4.04 NOT_FOUND */
     Serial.println(F("[RECEIVE][COAP][GET]->Resource not found"));
-
-    sendErrorResponse(remoteIp, remotePortNumber, ethMessage, NOT_FOUND, "RESOURCE NOT FOUND");
+    sendErrorResponse(NOT_FOUND, "RESOURCE NOT FOUND");
   }
 }
 
@@ -498,13 +463,7 @@ void getCharValueFromResourceValue(char* charValue, unsigned long value, uint16_
         charValue[0] = value + '0';
         charValue[1] = '\0';
       }
-
       break;
-      //          case 50:
-      //            /* j-son */
-      //            break;
-      //          default:
-      //            break;
   }
 }
 
@@ -550,60 +509,44 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
 }
 
 
+
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej kod błedu oraz payload diagnostyczny.
     -jesli żądanie typu CON - odpowiedz typu ACK
     -jesli żądanie typu NON - odpowiedz typu NON
     -jesli w żądaniu jest token to go przepisujemy
 */
-void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_t errorType, char * errorMessage) {
-  builder.init();
-  if (parser.parseType(message) == TYPE_CON)
-    builder.setType(TYPE_ACK);
-  else
-  {
-    builder.setType(TYPE_NON);
-  }
-  if (parser.parseTokenLen(message) > 0) {
-    builder.setToken(parser.parseToken(message, parser.parseTokenLen(message)), parser.parseTokenLen(message));
-  }
-
-  if (errorType < 500) { //server error
-    builder.setCodeClass(CLASS_SERR);
-
-  } else {
-    builder.setCodeClass(CLASS_CERR);
-  }
-
-  builder.setCodeDetail(errorType);
-  builder.setMessageId(messageId++);
-  builder.setPayload(errorMessage);
-
-  sendEthernetMessage(builder.build(), builder.getResponseSize(), ip, portNumber);
-}
-/*
-    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi zawierającej potwierdzenie odebrania żądania.
-    (metoda wywoływana w momencie otrzymania wiadomości typu CON)
-    - pusta odpowiedź zawiera jedynie nagłówek 4bajtowy;
-    - TYPE = TYPE_ACK;
-    - TLK = 0 -> brak tokena
-    - CODE = 0.00 (CLASS_REQ + DETAIL_EMPTY)
-    - MessageID = MessageID z wiadomości;
-*/
-void sendEmptyAckResponse(Session * session) {
+void sendErrorResponse(uint16_t errorType, char* errorMessage) {
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
-  builder.setType(TYPE_ACK);
-  builder.setCodeClass(CLASS_REQ);
-  builder.setCodeDetail(DETAIL_EMPTY);
-  builder.setMessageId(session->messageID);
 
-  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
+  /*------- set TYPE -------*/
+  if (parser.parseType(ethMessage) == TYPE_CON) {
+    builder.setType(TYPE_ACK);
+  }  else  {
+    builder.setType(TYPE_NON);
+  }
+
+  /*------- set CODE -------*/
+  uint16_t codeClass = (errorType / 100);
+  builder.setCodeClass(codeClass);
+  builder.setCodeDetail(errorType - (codeClass*100));
+
+  /*------- set MESSAGE ID -------*/
+  if (parser.parseType(ethMessage) == TYPE_CON) {
+    builder.setMessageId(parser.parseMessageId(ethMessage));
+  } else {
+    builder.setMessageId(messageId++);
+  }
+
+  /*------- set TOKEN -------*/
+  uint8_t tokenLen = parser.parseTokenLen(ethMessage);
+  byte* token = parser.parseToken(ethMessage, tokenLen);
+  builder.setToken(token, tokenLen);
+
+  builder.setPayload(errorMessage);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
 }
-
-
-
-
 /*
     Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem:
     - wersja protokołu: 1;
@@ -652,14 +595,10 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
   getCharValueFromResourceValue(charValue, resources[resourceNumber].value, 0);
   builder.setPayload(charValue);
   Serial.println(F("[sendContentResponse] build setPayload"));
+  
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
-
-  //Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->token/payload/observeOption"));
-
-  /* wyślij utworzoną wiaodmość zwrotną */
+ 
   Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->END"));
-
-  //  sendEthernetMessage(builder.build(), builder.getResponseSize(), ip , portNumber);
 }
 /*
    tak jak poprzednia funkcja z następującymi wyjątkami:
@@ -667,7 +606,7 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
 */
 void sendWellKnownContentResponse(uint8_t blockValue) {
   Serial.println(F("[SEND][COAP][WELL_KNOWN]"));
-  Serial.println(F("[SEND][COAP][WELL_KNOWN]"));
+  
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
@@ -681,7 +620,7 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
   byte* token = parser.parseToken(ethMessage, tokenLen);
   builder.setToken(token, tokenLen);
 
-  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
+  builder.setOption(CONTENT_FORMAT, LINK_FORMAT);
 
   Serial.println(F("[SEND][COAP][WELL_KNOWN]option"));
   /*narazie zakładamy ze bloki beda 64bitowe, wiec blokow w naszym przypadku zawsze bedzie mniej niz 16 ((blockNumber & 0x0f) << 4)
@@ -719,81 +658,14 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
   /* wyślij utworzoną wiaodmość zwrotną */
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
 }
-/*
-    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi z kodem 2.05 do klienta z ładunkiem oraz opcjami ETAG, OBSERVE:
-    - wersja protokołu: 1;
-    - typ wiadomości: CON
-    - kod wiadomości: 2.05 content
-    - messageID: pobrany z sesji;
-    - token: pobrany z sesji;
-    - opcja etag: pobrany z sesji;
-    - opcja observe: globalny licznik zwiększony o 1;
-    - ładunek: wartość etaga zapisanego w sesji;
 
-    - budujemy wiadomość zwrotną;
-    - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
+// END:CoAP_Methodes-----------------------------
 
-    - parametr sesji oznacza sesję nawiązaną miedzy serwerem a klientem, która dotyczy wiadomości typu CON;
-      (sesja przestanie być aktywna w momencie otrzymania potwierdzenia ACK z tym samym messageId);
-*/
-void sendContentResponseWithEtag(Session* session) {
-  builder.init();
-  builder.setVersion(DEFAULT_SERVER_VERSION);
-  builder.setType(TYPE_CON);
 
-  /* kod wiaodmości 2.05 CONTENT */
-  builder.setCodeClass(CLASS_SUC);
-  builder.setCodeDetail(5);
 
-  //  builder.setToken(session->token);
-  builder.setMessageId(session->messageID);
-  builder.setOption(ETAG, session->etag.etagId);
 
-  // builder.setOption(OBSERVE, ++observeCounter);
 
-  //TODO zalezc
-  builder.setPayload(session->etag.savedValue);
-
-  /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
-}
-/*
-    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta z kodem 2.03 VALID, opcją Etag, Observe oraz bez payloadu.
-    (zakładamy, że kod 2.03 może być tylko wysłany w mechanizmie walidacji opcji Etag podczas działającego mechanizmu Observe)
-    - wersja protokołu: 1;
-    - typ wiadomości: CON
-    - kod wiadomości: 2.03 valid
-    - messageID: pobrany z sesji;
-    - token: pobrany z sesji;
-    - opcja:etag: pobrany z sesji;
-    - opcja observe: globalny licznik zwiększony o 1;
-
-    - budujemy wiadomość zwrotną;
-    - wysyłamy ethernetem przekazując dane do metody sendEthernetMessage
-
-    - parametr sesji oznacza sesję nawiązaną miedzy serwerem a klientem, która dotyczy wiadomości typu CON;
-      (sesja przestanie być aktywna w momencie otrzymania potwierdzenia ACK z tym samym messageId);
-*/
-void sendValidResponse(Session* session) {
-  builder.init();
-  builder.setVersion(DEFAULT_SERVER_VERSION);
-  builder.setType(TYPE_CON);
-
-  /* kod wiaodmości 2.03 VALID */
-  builder.setCodeClass(CLASS_SUC);
-  builder.setCodeDetail(3);
-
-  //  builder.setToken(session->token);
-
-  builder.setMessageId(session->messageID);
-
-  builder.setOption(ETAG, session->etag.etagId);
-  // builder.setOption(OBSERVE, ++observeCounter);
-
-  /* wyślij utworzoną wiaodmość zwrotną */
-  sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
-}
-
+// START:CoAP_WellKnown_Methodes-----------------
 void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
   //initializacja pola payload (czyszczenie pola, dodanie znacznika)
   if (blockSize == 16) {
@@ -822,7 +694,7 @@ void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
     }
     if ((resources[index].flags & 0x01) == 1 ) {
       Serial.println(F("OBSERVE"));
-      if (setWellKnownCorePartToPayload(&freeLen, blockNumber, "</obs>;", blockSize)) {
+      if (setWellKnownCorePartToPayload(&freeLen, blockNumber, "obs;", blockSize)) {
         return;
       }
     }
@@ -844,9 +716,7 @@ void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
       return;
     }
   }
-  setWellKnownCorePartToPayload(&freeLen, blockNumber, "</shutdown>", blockSize);
 }
-
 //zwraca informacje o tym czy odpowiedni blok został już zapełniony
 bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* message, uint8_t blockSize) {
   Serial.println(F("setWellKnownCorePartToPayload->start"));
@@ -889,7 +759,9 @@ bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* 
   Serial.println(F("setWellKnownCorePartToPayload->stop3"));
   return false;
 }
-// END:CoAP_Methodes-----------------------------
+// START:CoAP_WellKnown_Methodes-----------------
+
+
 
 
 
