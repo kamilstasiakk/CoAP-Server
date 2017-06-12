@@ -44,7 +44,7 @@ RF24Network network(radio);
 // variable connected with wired connection
 EthernetUDP Udp;
 byte mac[] = {00, 0xaa, 0xbb, 0xcc, 0xde, 0xf3};
-IPAddress ip(192, 168, 1, 1);
+IPAddress ip(192, 168, 0, 33);
 const short localPort = 1237;
 const uint8_t MAX_BUFFER = 50; //do zastanowienia
 char ethMessage[MAX_BUFFER];
@@ -367,7 +367,7 @@ void receiveGetRequest(char* message, IPAddress ip, uint16_t portNumber) {
   }
 
   Serial.println(F("[RECEIVE][COAP][GET]->URI_Path option"));
-  //Serial.println(uriPath);
+  Serial.println(uriPath);
 
   
   /* przeglądamy dalsze opcje wiadomości w celu odnalezienia opcji ACCEPT */

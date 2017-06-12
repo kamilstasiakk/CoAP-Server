@@ -1,4 +1,4 @@
-</.well-known/core>;sz=64,
+﻿</.well-known/core>,
 </sensor/lamp>;rt="Lamp";title="state”,
 </sensor/button>;obs;rt="Button";title="state,
 </metric/PLR>;rt="PacketLossRate";title="value,
