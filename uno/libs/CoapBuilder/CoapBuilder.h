@@ -33,7 +33,7 @@ class CoapBuilder
     //sets setMessageId field value
     void setMessageId(uint16_t value);
      //sets Token and TKL field value
-    void setToken(char* value);
+    void setToken(byte* value, uint8_t length);
     //sets Option
     void setOption(uint32_t optionNumber, char* value);
     //sets Payload
@@ -56,6 +56,7 @@ class CoapBuilder
     uint8_t _lastOptionNum;
 	uint8_t _payloadLen;
 	uint8_t _messageLen;
+	uint8_t _payloadStart;
     void setTokenLen(uint8_t value);
 	int8_t byteArrayCompere(byte* a, byte* b);
     void byteArrayCopy(byte* to, byte* from);

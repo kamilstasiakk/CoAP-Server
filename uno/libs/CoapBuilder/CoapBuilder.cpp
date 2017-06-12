@@ -107,27 +107,36 @@ void CoapBuilder::setMessageId(uint16_t value)
 //	Serial.println(F("**[BUILDER][setMessageId]:END"));
 }
 
-void CoapBuilder::setToken(char* value)
+void CoapBuilder::setToken(byte* value, uint8_t tokenLen)
 {
-  uint8_t tokenLen = (uint8_t) strlen(value);
   setTokenLen(tokenLen);
+ // Serial.println(F("[BUILDER] CoapBuilder::setToken"));
+//  Serial.println(value[0], BIN);
+//  Serial.println(tokenLen, BIN);
+  
   //shift if options or payload are set
-  if (_messageLen > 4) {
+ // if (_messageLen > 4) {
     //from message[messageLen - 1 + tokenLen] = message[messageLen - 1]
     //to message[messageLen - messageLen + 4 + tokenLen] = message[messageLen - messageLen + 4]
-    for (uint8_t j = 1; j > _messageLen - 5; j++) {
-      message[_messageLen - j + tokenLen] = message[_messageLen - j];
-    }
-  } else {
+   // for (uint8_t j = 1; j > _messageLen - 5; j++) {
+  //    message[_messageLen - j + tokenLen] = message[_messageLen - j];
+  //  }
+//  } else {
     message[4 + tokenLen] = '\0';
-  }
+ // }
   _lastOptionStart += tokenLen;
-  
+ // Serial.println(_lastOptionStart, BIN);
   //set token value
-  for (int i = 0; i < strlen(value); i++) {
+  for (int i = 0; i < tokenLen; i++) {
     message[4 + i] = value[i];
+	//Serial.println(F("iter"));
+ // Serial.println(message[4 + i], BIN);
   }
-  
+ // Serial.println(F("msg"));
+ // Serial.println(message[4], BIN);
+ // Serial.println(message[5], BIN);
+ // Serial.println(message[6], BIN);
+//  Serial.println(F("[BUILDER] CoapBuilder::setToken"));
 	//Serial.println(F("**[BUILDER][setToken]:Hole Message"));	
 //	Serial.println(F("***[BUILDER][setToken]:END"));
 }
@@ -138,17 +147,27 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
 {
 //	Serial.println(value[0],BIN);
 //	Serial.println(strlen(value));
-  _lastOptionLen = strlen(value);
-  _lastOptionNum = optionNumber;
+//	Serial.println(F("SET Option VALUE"));
+//	Serial.println(value);
+	//Serial.println(F("SET Option VALUE BIN"));
+//	Serial.println(value[0], BIN);
+  
   uint8_t optNumOffset = 0;
   uint8_t optLenOffset = 0;
 
   if (message[_lastOptionStart] != '\0') //there was some option set
   {
     optionNumber -= _lastOptionNum;
-    _lastOptionStart += _lastOptionLen;
-//	 Serial.println(F("tak"));
+    _lastOptionStart = _messageLen;
+//	 Serial.println(F("there was some option set"));
   }
+  _lastOptionLen = strlen(value);
+ // Serial.println(F("BUILDER SET Option));
+//	Serial.println(value[0], BIN);
+  if (_lastOptionLen == 0) {
+	  _lastOptionLen = 1;
+  }
+  _lastOptionNum = optionNumber;
   
   //writing option number 
   if (optionNumber < 13) {
@@ -196,17 +215,17 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   //auxiliary adding to deacrease adding operations in for loop
   _lastOptionStart += optNumOffset + optLenOffset + 1;
   //writing the value of option
-//  for (uint8_t i = 0; i < _lastOptionLen; i++) {
-//    message[_lastOptionStart + i] = value[i] - '0'; 
+  for (uint8_t i = 0; i < _lastOptionLen; i++) {
+    message[_lastOptionStart + i] = value[i]; 
 //	Serial.println(_lastOptionStart + i);
-//	Serial.println(value[i]);
+
 //	Serial.println(value[0]);
 //	Serial.println(value[1]);
 //	Serial.println(*value);
 //	Serial.println(value);
 //	Serial.println(_lastOptionLen);
 //	Serial.println(F("add value"));
-//  }
+  }
   //ending message
   message[_lastOptionStart + _lastOptionLen] = '\0';
   
@@ -233,7 +252,10 @@ void CoapBuilder::setPayload(char* value)
   //adding payload marker
   message[_messageLen ++] = 255;
   
- // Serial.println(strlen(value));
+ // Serial.println(F("strlen(value)"));
+//  Serial.println(strlen(value));
+ // Serial.println(F("value"));
+ // Serial.println(value);
   
   
   for (i = 0; i < strlen(value); i++) {
@@ -273,35 +295,100 @@ void CoapBuilder::setPayload(char* value, uint8_t start)
 
 //append string to payload
 void CoapBuilder::appendPayload(char* value) {
-	uint8_t i;
+	int i;
+	Serial.println(F("BUILDER->appendPayload1 START"));
+	Serial.println(value);
+	for (int j = 0; j < _messageLen; j++) {
+		Serial.print(message[j]);
+	}
+	Serial.println(F(""));
+	Serial.println(_payloadLen);
+	Serial.println(_messageLen);
   for (i = 0; i < strlen(value); i++) {
     message[_messageLen + i] = value[i];
+	Serial.print(value[i]);
   }
   message[_messageLen + i] = '\0';
+  _messageLen += i;
   _payloadLen += strlen(value);
+	for (int j = 0; j < _messageLen; j++) {
+		Serial.print(message[j]);
+	}
+	Serial.println(F(""));
+	Serial.println(_payloadLen);
+  Serial.println(F("BUILDER->appendPayload1 STOP"));
 }
 
 void CoapBuilder::appendPayload(char* value, uint8_t len) {
-	uint8_t i;
+//	Serial.println(F("BUILDER->start"));
+ // Serial.println(len);
+ // Serial.println(_messageLen);
+ // Serial.println(message[_messageLen]);
+ // Serial.println(message[_messageLen + 1]);
+ Serial.println(F("BUILDER->appendPayload2 START"));
+	Serial.println(value);
+	for (int j = 0; j < _messageLen; j++) {
+		Serial.print(message[j]);
+	}
+	Serial.println(F(""));
+	Serial.println(_payloadLen);
+	Serial.println(_messageLen);
+	int i;
   for (i = 0; i < len; i++) {
     message[_messageLen + i] = value[i];
+	Serial.print(value[i]);
+	Serial.print(message[_messageLen + i]);
   }
+  Serial.println(F(""));
   message[_messageLen + i] = '\0';
-  _payloadLen += strlen(value);
+  _messageLen += i;
+  _payloadLen += len;
+  for (int j = 0; j < _messageLen; j++) {
+		Serial.print(message[j]);
+	}
+	Serial.println(F(""));
+	Serial.println(_payloadLen);
+  Serial.println(F("BUILDER->appendPayload2 STOP"));
 }
 
 void CoapBuilder::appendPayload(char* value, uint8_t start, uint8_t end) {
 	uint8_t i;
+	Serial.println(F("BUILDER->appendPayload3 START"));
+	Serial.println(value);
+	
+	for (int j = 0; j < _messageLen; j++) {
+		Serial.print(message[j]);
+	}
+	Serial.println(F(""));
+	Serial.println(_payloadLen);
+	Serial.println(_messageLen);
+	
   for (i = start; i < end; i++) {
-    message[_messageLen + i] = value[i];
+    message[_messageLen + i - start] = value[i];
+	Serial.print(value[i]);
+	Serial.print(message[_messageLen + i - start]);
   }
+  Serial.println(F(""));
   message[_messageLen + i] = '\0';
-  _payloadLen += strlen(value);
+  _payloadLen += (end - start);
+  _messageLen += (end - start);
+  for (int j = 0; j < _messageLen; j++) {
+		Serial.print(message[j]);
+	}
+	Serial.println(F(""));
+	Serial.println(_payloadLen);
+  Serial.println(F("BUILDER->appendPayload3 STOP"));
 }
 // remove Payload from message (payload tag is removed too)
 void CoapBuilder::flushPayload() {
 	_messageLen -= _payloadLen;
 	_payloadLen = 0;
+	Serial.println(F("BUILDER->flushPayload"));
+  Serial.println(_messageLen);
+  Serial.println(message[_messageLen]);
+  Serial.println(message[_messageLen-1]);
+  Serial.println(message[_messageLen-2]);
+  Serial.println(message[_messageLen+1]);
 		uint8_t i;
   for (i = 0; i <_messageLen; i++) {
     if (message[i] == 255) {

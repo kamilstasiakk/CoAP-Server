@@ -15,7 +15,7 @@ class CoapParser
 {
   public:
 	static const int FIELD_MAX_LENGHT = 15;
-    char fieldValue[FIELD_MAX_LENGHT];
+    byte fieldValue[FIELD_MAX_LENGHT];
 	
     typedef struct record Record;
 
@@ -31,27 +31,28 @@ class CoapParser
     //zwraca dodatkowe info o kodzie - stałe DETAIL_*
     uint8_t parseCodeDetail(char* message);
     //zwraca message ID
-    uint16_t parseMessageId(char* message);
+    uint16_t parseMessageId(byte* message);
     // zwraca wskaznik na tablice, w ktorej zapisany jest Token, 
     //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    char* parseToken(char* message, uint8_t tokenLen);
+    byte* parseToken(byte* message, uint8_t tokenLen);
     // zwraca numer pierwszej opcji, jej wartość zapisana jest w polu fieldValue, 
     //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    uint8_t getFirstOption(char* message);
+    uint8_t getFirstOption(char* message, uint8_t messageLen);
     // zwraca numer kolejnej opcji, jej wartość zapisana jest w polu fieldValue, 
     //należy zczytać wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    uint8_t getNextOption(char* message) ;
+    uint8_t getNextOption(char* message, uint8_t messageLen) ;
     //zwraca długość pola danych
     uint8_t getPayloadSize(char* message);
     // zwraca wskaznik na tablice, w ktorej zapisany jest payload, 
     //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    char* parsePayload(char* message);
-   
+    byte* parsePayload(char* message);
+	uint8_t getOptionLen();
   private:
+	uint8_t _optionLen;
     uint8_t _currentOptionStart;
     uint8_t _payloadStart;
     uint8_t _lastOptionType;

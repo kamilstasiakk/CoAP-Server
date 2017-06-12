@@ -68,30 +68,42 @@ uint8_t CoapParser::parseCodeDetail(char* message)
 }
 
 //zwraca message ID
-uint16_t CoapParser::parseMessageId(char* message)
+uint16_t CoapParser::parseMessageId(byte* message)
 {
 //	Serial.println(F("--[PARSER][parseMessageId]:"));
-//	Serial.println(message[2],BIN);
+	//Serial.println(message[2],BIN);
 //	Serial.println(message[3],BIN);
-//	Serial.println(message[2]& 0xff);
-//	Serial.println((message[2]& 0xff) << 8);
-//	Serial.println((message[2]& 0xff) << 8  + message[3]);
+	//Serial.println(message[2]& 0xff);
+//Serial.println((uint16_t)((message[2]& 0xff) << 8));
+//uint16_t a = (message[2]& 0xff) << 8;
+//	Serial.println(((message[2]& 0xff) << 8)  + message[3]);
+//	a += message[3];
 //	Serial.println(F("--[PARSER][parseMessageId]:END"));
 	
-  return ((message[2]& 0xff) << 8  + message[3]);
+  return ((uint16_t)((message[2]& 0xff) << 8)  + message[3]);
+ //return a;
 }
 
 // zwraca wskaznik na tablice, w ktorej zapisany jest Token, 
 //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char*
-char* CoapParser::parseToken(char* message, uint8_t tokenLen) 
+byte* CoapParser::parseToken(byte* message, uint8_t tokenLen) 
 {   
   uint8_t byteNumber;
+  //Serial.println(F("PARSER : tokenLEn"));
+//	Serial.println(tokenLen);
+	
+	//Serial.println(F("PARSER : MESSAGE"));
+	//Serial.println(message[4], BIN);
+	//Serial.println(message[5], BIN);
    for (byteNumber = 0; byteNumber < tokenLen; byteNumber++) {
       fieldValue[byteNumber] = message[4+byteNumber];
+	//  Serial.println(F("PARSER : iter"));
+	//	Serial.println(message[4+byteNumber], BIN);
    }
    fieldValue[byteNumber] = '\0';
+  
    
-//   	Serial.println(F("--[PARSER][parseToken]:"));
+//  Serial.println(F("--[PARSER][parseToken]:"));
 //	Serial.println(fieldValue);
 //	Serial.println(F("--[PARSER][parseToken]:END"));
    
@@ -99,21 +111,24 @@ char* CoapParser::parseToken(char* message, uint8_t tokenLen)
 }
 
 
-//0 - brak opcji
+//255 - brak opcji
 //zwraca typ opcji, wartosc wyciagamy z pola fieldValue
-uint8_t CoapParser::getFirstOption(char* message) {
+uint8_t CoapParser::getFirstOption(char* message, uint8_t messageLen) {
   _currentOptionStart = 4 + parseTokenLen(message);
   _lastOptionType = 0;
   _payloadStart = 0;
-  return getNextOption(message);
+  return getNextOption(message, messageLen);
 }
 
-//0 - brak opcji
+//255 - brak opcji
 //zwraca typ opcji, wartosc wyciagamy z pola fieldValue
-uint8_t CoapParser::getNextOption(char* message) {  
+uint8_t CoapParser::getNextOption(char* message, uint8_t messageLen) {  
   //sprawdzam czy sa jakies opcje/payload
-  if (strlen(message) <= _currentOptionStart)
+  Serial.println(F("CoapParser::getNextOption START"));
+  if (messageLen <= _currentOptionStart)
     return 0;
+	Serial.println(F("Po ifie"));
+    Serial.println(_currentOptionStart);
   uint8_t type = (uint8_t) (message[_currentOptionStart] & 0xf0) >> 4;
   uint8_t offset = 0;
   uint32_t optionLen = 0;
@@ -131,6 +146,7 @@ uint8_t CoapParser::getNextOption(char* message) {
       fieldValue[i] = '\0';
       _currentOptionStart += 2 + optionLen + offset;
 	  _lastOptionType += optiontype;
+	  _optionLen = optionLen & 0xff;
       return _lastOptionType;
       break;
     case 14:
@@ -143,6 +159,7 @@ uint8_t CoapParser::getNextOption(char* message) {
       fieldValue[i] = '\0';
       _currentOptionStart += 3 + optionLen + offset;
 	  _lastOptionType += optiontype;
+	  _optionLen = optionLen & 0xff;
       return _lastOptionType;
       break;
     case 15:
@@ -155,9 +172,14 @@ uint8_t CoapParser::getNextOption(char* message) {
       for (i = 0; i < optionLen; i++) {
         fieldValue[i] = message[_currentOptionStart + 1 + offset + i];
       }
-      fieldValue[i] = '\0';
+      fieldValue[i] = '\0';// jesli dlugosc opcji = 0 to zwrocona wartosc 
+	  //opcji tez bedzie 0 (oczekiwane zachowanie dla opcji accept)
       _currentOptionStart += 1 + optionLen + offset;
+	  _optionLen = optionLen & 0xff;
 	   _lastOptionType += type;
+	    Serial.println(_currentOptionStart);
+		 Serial.println(_optionLen);
+		  Serial.println(_lastOptionType);
       return _lastOptionType;
     break;
   }
@@ -194,7 +216,7 @@ uint8_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
 }
 
 
-char* CoapParser::parsePayload(char* message) {
+byte* CoapParser::parsePayload(char* message) {
   for (int i = _payloadStart; i < strlen(message); i++) {
     fieldValue[i - _payloadStart] = message[i];
   }
@@ -205,6 +227,8 @@ uint8_t CoapParser::getPayloadSize(char* message) {
   return (strlen(message) - _payloadStart);
 }
 
-
+uint8_t CoapParser::getOptionLen() {
+  return _optionLen;
+}
 
 
