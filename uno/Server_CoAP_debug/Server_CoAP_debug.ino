@@ -46,7 +46,7 @@ EthernetUDP Udp;
 byte mac[] = {00, 0xaa, 0xbb, 0xcc, 0xde, 0xf3};
 IPAddress ip(192, 168, 0, 33);
 const short localPort = 5683;
-const uint8_t MAX_BUFFER = 50; //do zastanowienia
+const uint8_t MAX_BUFFER = 50;
 char ethMessage[MAX_BUFFER];
 uint8_t messageLen = 0;
 IPAddress remoteIp;
@@ -55,6 +55,11 @@ uint8_t currentBlock = 0;
 
 // CoAP variables:
 Resource resources[RESOURCES_COUNT];
+
+Observator observators[MAX_OBSERVATORS_COUNT];
+uint32_t observeCounter = 0; // globalny licznik związany z opcją observe - korzystamy z niego, gdy serwer generuje wiadomość notification
+
+//miejsce na etag
 
 CoapParser parser = CoapParser();
 CoapBuilder builder = CoapBuilder();
@@ -73,7 +78,6 @@ void setup() {
 
   Serial.println(F("[setup]->READY"));
 }
-
 void loop() {
   // checking the network object regularly;
   network.update();
@@ -83,7 +87,6 @@ void loop() {
 }
 
 
-
 // Resources:Methodes---------------------------
 void initializeResourceList() {
   // well-known.core
@@ -91,7 +94,7 @@ void initializeResourceList() {
   resources[0].resourceType = "";
   resources[0].interfaceDescription = "";
   resources[0].value = 0;
-  resources[0].size = 269;
+  resources[0].size = 247;
   resources[0].flags = B00000000;
 
   // lampka
@@ -135,7 +138,6 @@ void initializeResourceList() {
 }
 
 // End:Resources--------------------------------
-
 
 // RF24:Methodes--------------------------------
 /*
@@ -320,14 +322,9 @@ void getCoapClienMessage() {
 */
 void receiveGetRequest() {
 
-  Serial.println(F("[RECEIVE][COAP][GET]"));
-
-  char etagOptionValues[ETAG_MAX_OPTIONS_COUNT][8];
-  int etagValueNumber = 0;
-  uint8_t etagCounter = "";
-  
+  Serial.println(F("[RECEIVE][COAP][GET]->START..."));
+ 
   uint8_t observeOptionValue = 2; // klient może wysłac jedynie 0 lub 1
-  
   char uriPath[20] = "";
   uint8_t acceptOptionValue = 0;
   uint8_t blockOptionValue = 255;
@@ -347,6 +344,13 @@ void receiveGetRequest() {
     else {
       /* szukamy opcji Etag oraz Observe */
       while ( optionNumber != URI_PATH && optionNumber != NO_OPTION) {
+        if ( optionNumber == OBSERVE ) {
+           /* wystąpiła opcja OBSERVE, zapisz jej zawartość */
+           observeOptionValue = parser.fieldValue[0];
+        }
+
+
+        
         optionNumber = parser.getNextOption(ethMessage, messageLen);
       } // end of while loop
     } // end of else
@@ -357,7 +361,7 @@ void receiveGetRequest() {
     strcpy(uriPath, parser.fieldValue);
   }
   else {
-    /* wiadomość nie zawierala opcji URI_PATH */
+    /* wiadomość nie zawierala opcji URI_PATH, ale zawiera jakies inne opcje */
     sendErrorResponse(BAD_REQUEST, "NO URI");
     return;
   }
@@ -412,9 +416,9 @@ void receiveGetRequest() {
     } else {
       sendWellKnownContentResponse(blockOptionValue);
     }  
-  } else {
-    /*----analiza wiadomości---- */
-    /* szukamy wskazanego zasobu na serwerze */
+  } 
+  /* szukamy wskazanego zasobu na serwerze */
+  else {
     for (uint8_t resourceNumber = 1; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
       if ( strcmp(resources[resourceNumber].uri, uriPath) == 0) {
         /* wskazany zasób znajduje się na serwerze */
@@ -422,9 +426,94 @@ void receiveGetRequest() {
         Serial.println(F("[RECEIVE][COAP][GET]->Resource Number:"));
         Serial.println(resourceNumber);
 
-        /* zmienne mówiące o pozycji w listach */
+        /*-----analiza zawartości opcji OBSERVE-----------------------------------------------------------------------------*/     
+        /* 0 - jeżeli dany klient nie znajduje się na liście obserwatorów to go dodajemy */
+        /* 1 -  jeżeli dany klienta znajduje sie na liscie obserwatorów to usuwamy go */
+        
         uint8_t observatorIndex = MAX_OBSERVATORS_COUNT + 1;
-        uint8_t etagIndex = MAX_ETAG_COUNT + 1;
+        if ( observeOptionValue != 2 ) {
+          /* opcja OBSERVE wystąpiła w żądaniu */
+          if ( observeOptionValue == 0 || observeOptionValue == 1) {            
+            /* sprawdzanie, czy dany zasób może być obserwowany */
+            if ( (resources[resourceNumber].flags & 0x01) == 1 ) {
+              /* zasób może być obserwowany */
+                
+              /* szukam klienta na liście zapisanych obserwatorów observators[] */
+              observatorIndex = checkIfClientIsObserving(resourceNumber);
+               
+              /* klient jest na liscie obserwatorow */
+              if ( observatorIndex != MAX_OBSERVATORS_COUNT + 1) {
+                Serial.println(F("[RECEIVE][COAP][GET][observe]->client is on the list"));
+                Serial.println(observatorIndex);
+                
+                if ( observeOptionValue == 1 ) {
+                  /* usuń klienta z listy obserwatorów - zmień status na wolny */
+                  Serial.println(F("[RECEIVE][COAP][GET][observe]->delete client from observers"));
+
+                  observators[observatorIndex].details = (observators[observatorIndex].details | 0x80);
+                }
+                if ( observeOptionValue == 0 ) {
+                  /* nic nie robimy - klient podtrzymuje chec obserwowania */
+                  Serial.println(F("[RECEIVE][COAP][GET][observe]->update"));
+                }
+              }            
+              /* klienta nie ma na liscie obserwatorow */
+              else {
+                Serial.println(F("[RECEIVE][COAP][GET][observe]->client is not on the list"));
+                
+                if ( observeOptionValue == 1 ) {
+                  /* wyslij blad - not register z kodem 4.00 BAD_REQUEST*/
+                  sendErrorResponse(BAD_REQUEST, "OBSERVER NOT FOUND");
+                  return;
+                }
+                if ( observeOptionValue == 0 ) {
+                  /* szukamy pierwszego wolnego miejsca aby go zapisać */
+                  for ( uint8_t index = 0; index < MAX_OBSERVATORS_COUNT; index++) {
+                    if ( observators[index].details >= 128) {
+                      /* znalezlismy wolne miejsce na liscie obserwatorow */
+                      observatorIndex = index;
+
+                      Serial.println(F("[RECEIVE][COAP][GET][observe]->Add new observer:"));
+                      Serial.println(observatorIndex);
+                      
+                      observators[observatorIndex].ipAddress = remoteIp;
+                      observators[observatorIndex].portNumber = remotePortNumber;
+                      builder.byteArrayCopy(observators[observatorIndex].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)));
+                      observators[observatorIndex].resource = &resources[resourceNumber];
+                      for ( int i = 0; i < MAX_ETAG_CLIENT_COUNT; i++) {
+                        observators[observatorIndex].etagsKnownByTheObservator[i] = 0;
+                      }
+                      observators[observatorIndex].etagCounter = 0;
+                      observators[observatorIndex].details = 0;                   
+                      break;
+                    }
+                  }
+                  /*  jeżeli lista jest pełna to wyślij błąd INTERNAL_SERVER_ERROR  */
+                  if ( observatorIndex == MAX_OBSERVATORS_COUNT + 1 ) {
+                    sendErrorResponse(INTERNAL_SERVER_ERROR, "OBSERV LIST FULL");
+                    return;
+                  }
+                } 
+              }
+            } // sprawdzenie czy obserwowalny
+            else {
+              /* zasób nie może być obserwowany - wyslij blad kodem 4.00 BAD_REQUEST*/
+              sendErrorResponse(BAD_REQUEST, "RESOURCE CAN NOT BE OBSERVED");
+              return;
+            }
+          } // sprawdzenie wartości 0 1
+          else {
+            /* podano błędną wartość opcji OBSERVE - wyślij bład */
+            sendErrorResponse(BAD_REQUEST, "WRONG OBSERVE VALUE");
+            return;
+          }
+        } // sprawdzenie !=2
+        /*-----koniec analizy wartości observe----------------------------------------------------------------------------- */
+
+
+
+
+
         
         /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
         /* wyslij wiadomość NON 2.05 content z opcja CONTENT_TYPE zgodną z accept lub domyślną */
@@ -662,7 +751,58 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
 // END:CoAP_Methodes-----------------------------
 
 
+// START:CoAP_Get_Methodes----------------------
+/**
+   Metoda odpowiedzialna za wyszukiwanie klienta w liście obserwatorów
+   - metoda zwraca indeks elementu w tablicy observators
+   - jeżeli nie znaleziono klienta, metoda zwraca wartość MAX_OBSERVATORS_COUNT + 1
 
+   - porównywane wartości:
+      - wpis aktywny (detail)
+      - uri zasobu
+      - adres ip i numer portu
+      - wartosc tokena
+*/
+uint8_t checkIfClientIsObserving(int resourceNumber) {
+  for (uint8_t observatorIndex = 0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ) {
+    if (  observators[observatorIndex].details < 128 ) { // wpis jest aktywny
+      if ( strcmp(observators[observatorIndex].resource->uri, resources[resourceNumber].uri) == 0) {
+        if ( observators[observatorIndex].ipAddress == remoteIp ) {
+          if ( observators[observatorIndex].portNumber == remotePortNumber ) {
+            Serial.println(F("aaaaa"));
+            if ( tokenCompare(observators[observatorIndex].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)), parser.parseTokenLen(ethMessage)) == 0) {
+              /* znaleziono klienta na liscie obserwatorow */
+              return observatorIndex;
+            }
+          }
+        }
+      }
+    }
+  }
+  /* nie znaleziono klienta na liście obserwatorow */
+  return MAX_OBSERVATORS_COUNT + 1;
+}
+/**
+ * Metoda odpowiedzialna za porównywanie tablic bajtów
+ * - jeżeli tablice są rowne to zwraca 0
+ * - jezeli tablice sa rozne to zwraca 1
+ */
+uint8_t tokenCompare(byte* a, byte* b, size_t len){
+  boolean same = true;
+    for( uint8_t number=0; number < len; number++) {
+      if (b[number] != a[number]) {
+        same = false;
+      }
+    }
+
+    if(same) {
+      return 0;
+    }
+    else {
+      return 1;
+    }
+}
+// END:CoAP_Get_Methodes------------------------
 
 
 // START:CoAP_WellKnown_Methodes-----------------
