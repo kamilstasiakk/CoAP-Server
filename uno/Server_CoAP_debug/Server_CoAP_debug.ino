@@ -93,8 +93,9 @@ void loop() {
 
   for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
     if( sessions[sessionNumber].details < 128 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
-   //   sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
+      sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
       sessions[sessionNumber].sessionTimestamp = millis();
+      sessions[sessionNumber].messageID = messageId++;
     }
   }
 }
@@ -789,7 +790,7 @@ void receiveEmptyRequest() {
           if ( parser.parseType(ethMessage) == TYPE_ACK ) {
             /* zmień status sesji na wolny */
             Serial.println(F("[RECEIVE][COAP]->kasuje sesji:"));
-            resources[5].value = resources[5].value * 0,9 + (millis() - sessions[sessionNumber].sessionTimestamp) * 0,1;
+            resources[5].value = (double)(resources[5].value * 0,9) + (double)((double)(millis() - sessions[sessionNumber].sessionTimestamp) * 0,1);
             sessions[sessionNumber].details = 128;
             return;
           }
