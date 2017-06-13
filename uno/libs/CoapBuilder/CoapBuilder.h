@@ -48,6 +48,9 @@ class CoapBuilder
 	size_t getResponseSize();
     byte* build(); 
     byte* buildAckHeader();
+	
+	int8_t byteArrayCompere(byte* a, byte* b, size_t len);
+	void byteArrayCopy(byte* to, byte* from);
 
   private:
     
@@ -58,8 +61,6 @@ class CoapBuilder
 	uint8_t _messageLen;
 	uint8_t _payloadStart;
     void setTokenLen(uint8_t value);
-	int8_t byteArrayCompere(byte* a, byte* b);
-    void byteArrayCopy(byte* to, byte* from);
 	void byteArrayCat(byte* to, byte* from);
 	uint8_t byteArrayLen(byte* a);
 };

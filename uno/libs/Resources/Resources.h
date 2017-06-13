@@ -10,11 +10,14 @@
 */
 
 
-const int RESOURCES_COUNT = 6;
-const int MAX_SESSIONS_COUNT = 2;
-const int MAX_ETAG_COUNT = 3;
-const int MAX_ETAG_CLIENT_COUNT = 3;
-//uint8_t MAX_OBSERVATORS_COUNT = 5;
+const uint8_t RESOURCES_COUNT = 6;
+const uint8_t MAX_SESSIONS_COUNT = 2;
+const uint8_t MAX_ETAG_COUNT = 2; 	//globalnie
+const uint8_t MAX_ETAG_CLIENT_COUNT = 2;	//u obserwatora
+const uint8_t MAX_OBSERVATORS_COUNT = 2;
+
+const uint8_t ETAG_VALID_TIME_IN_SECONDS = 128;
+const uint8_t MAX_TOKEN_LEN = 8;
 
 // error codes
 const uint16_t BAD_REQUEST = 400;
@@ -31,9 +34,10 @@ const uint16_t OBSERVE = 6;
 const uint16_t BLOCK2 = 23;
 const uint16_t NO_OPTION = 0;
 
-const uint8_t PLAIN_TEXT = 0;
-const uint8_t XML = 41;
-const uint8_t JSON = 50;
+const char PLAIN_TEXT[2] = {0, '\0'};
+const char LINK_FORMAT[2] = {40, '\0'};
+const char XML[2] = {41, '\0'};
+const char JSON[2] = {50, '\0'};
 
 // TYPE (T) fields:
 const uint8_t TYPE_CON = 0;
@@ -46,10 +50,6 @@ const uint8_t TYPE_RST = 3;
 const uint8_t CLASS_REQ = 0;
 //code class - success response
 const uint8_t CLASS_SUC = 2;
-//code class - client error response
-const uint8_t CLASS_CERR = 4;
-//code class - server error response
-const uint8_t CLASS_SERR = 5;
 
 //code details - empty message
 const uint8_t DETAIL_EMPTY = 0;
@@ -64,11 +64,9 @@ const uint8_t DETAIL_DELETE = 4;
 
 const uint8_t DEFAULT_SERVER_VERSION = 1;
 
-// maksymalna liczba opcji etag możliwych w jednej wiadomości
-const int ETAG_MAX_OPTIONS_COUNT = 3;
-const uint8_t ETAG_VALID_TIME_IN_SECONDS = 128;
 
-const int MAX_OBSERVATORS_COUNT = 3;
+
+
 
 struct Resource {
   char* uri;
@@ -102,8 +100,8 @@ struct Resource {
 */
 struct Etag {
   Resource* resource;
-  uint16_t savedValue;
-  uint32_t etagId;
+  unsigned long savedValue;
+  uint8_t etagId;
   uint8_t timestamp;
 
   // token wyjmujemy z geta
@@ -131,7 +129,8 @@ struct Etag {
 struct Observator {
   IPAddress ipAddress;
   uint16_t portNumber;
-  char token[8];
+  byte token[MAX_TOKEN_LEN];
+  size_t tokenLen;
   Resource* resource;
   Etag* etagsKnownByTheObservator[MAX_ETAG_CLIENT_COUNT];
   uint8_t etagCounter;
@@ -171,9 +170,11 @@ struct Session {
   uint16_t portNumber;
   
   uint16_t messageID;  // do weryfikowania, czy nasza odpowiedź została potwierdzona
-  Etag etag;
-  char token[8];
+  Etag* etag;
+  uint8_t sessionTimestamp;
   
+  byte token[MAX_TOKEN_LEN];
+  size_t tokenLen;
   uint8_t sensorID;
   /*
       7     |6 5  |   4 3 2 1 0   |

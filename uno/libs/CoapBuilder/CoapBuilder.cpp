@@ -219,7 +219,9 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
     message[_lastOptionStart + i] = value[i]; 
 //	Serial.println(_lastOptionStart + i);
 
+//	Serial.println(F("---------------------"));
 //	Serial.println(value[0]);
+//	Serial.println(_lastOptionLen);
 //	Serial.println(value[1]);
 //	Serial.println(*value);
 //	Serial.println(value);
@@ -296,27 +298,27 @@ void CoapBuilder::setPayload(char* value, uint8_t start)
 //append string to payload
 void CoapBuilder::appendPayload(char* value) {
 	int i;
-	Serial.println(F("BUILDER->appendPayload1 START"));
-	Serial.println(value);
-	for (int j = 0; j < _messageLen; j++) {
-		Serial.print(message[j]);
-	}
-	Serial.println(F(""));
-	Serial.println(_payloadLen);
-	Serial.println(_messageLen);
+	//Serial.println(F("BUILDER->appendPayload1 START"));
+	//Serial.println(value);
+	//for (int j = 0; j < _messageLen; j++) {
+	//	Serial.print(message[j]);
+	//}
+	//Serial.println(F(""));
+	//Serial.println(_payloadLen);
+	//Serial.println(_messageLen);
   for (i = 0; i < strlen(value); i++) {
     message[_messageLen + i] = value[i];
-	Serial.print(value[i]);
+	//Serial.print(value[i]);
   }
   message[_messageLen + i] = '\0';
   _messageLen += i;
   _payloadLen += strlen(value);
-	for (int j = 0; j < _messageLen; j++) {
-		Serial.print(message[j]);
-	}
-	Serial.println(F(""));
-	Serial.println(_payloadLen);
-  Serial.println(F("BUILDER->appendPayload1 STOP"));
+	//for (int j = 0; j < _messageLen; j++) {
+	//	Serial.print(message[j]);
+	//}
+	//Serial.println(F(""));
+	//Serial.println(_payloadLen);
+  //Serial.println(F("BUILDER->appendPayload1 STOP"));
 }
 
 void CoapBuilder::appendPayload(char* value, uint8_t len) {
@@ -427,9 +429,8 @@ size_t CoapBuilder::getResponseSize()
  * bajtów używamy jako rozszerzonych ASCII (aby mogly miec wartosc 0<x<256
  * byte owartosci 0 oznacza to samo co '\0' dla ascii
  */
-int8_t CoapBuilder::byteArrayCompere(byte* a, byte* b) {
-  uint8_t number = 0;
-  while (1) {
+int8_t CoapBuilder::byteArrayCompere(byte* a, byte* b, size_t len) {
+  for( uint8_t number=0; number < len; number++) {
     if (a[number] == 0) {
       if (b[number] == 0) {
         return 0;
@@ -444,7 +445,6 @@ int8_t CoapBuilder::byteArrayCompere(byte* a, byte* b) {
         return 1;
     }
   }
-  number++;
 }
 
 //kopiuje zawartosc tablicy from do tablicy to

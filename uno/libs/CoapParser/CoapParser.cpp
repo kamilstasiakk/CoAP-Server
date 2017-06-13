@@ -127,8 +127,8 @@ uint8_t CoapParser::getNextOption(char* message, uint8_t messageLen) {
   Serial.println(F("CoapParser::getNextOption START"));
   if (messageLen <= _currentOptionStart)
     return 0;
-	Serial.println(F("Po ifie"));
-    Serial.println(_currentOptionStart);
+	//Serial.println(F("Po ifie"));
+   // Serial.println(_currentOptionStart);
   uint8_t type = (uint8_t) (message[_currentOptionStart] & 0xf0) >> 4;
   uint8_t offset = 0;
   uint32_t optionLen = 0;
@@ -177,9 +177,9 @@ uint8_t CoapParser::getNextOption(char* message, uint8_t messageLen) {
       _currentOptionStart += 1 + optionLen + offset;
 	  _optionLen = optionLen & 0xff;
 	   _lastOptionType += type;
-	    Serial.println(_currentOptionStart);
-		 Serial.println(_optionLen);
-		  Serial.println(_lastOptionType);
+	    //Serial.println(_currentOptionStart);
+		// Serial.println(_optionLen);
+		//  Serial.println(_lastOptionType);
       return _lastOptionType;
     break;
   }
