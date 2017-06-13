@@ -57,9 +57,13 @@ uint8_t currentBlock = 0;
 Resource resources[RESOURCES_COUNT];
 
 Observator observators[MAX_OBSERVATORS_COUNT];
-uint32_t observeCounter = 0; // globalny licznik związany z opcją observe - korzystamy z niego, gdy serwer generuje wiadomość notification
+uint8_t observeCounter = 2; // globalny licznik związany z opcją observe, zaczynamy od 2
 
-//miejsce na etag
+Etag globalEtags[MAX_ETAG_COUNT];
+uint8_t globalEtagsCounter = 0; // globalny licznik związany z ilością uzytych etagow
+uint8_t etagIdCounter = 1; // globalny licznik potrzebny do generowania id etagow, zaczynamy od 1
+
+Session sessions[MAX_SESSIONS_COUNT];
 
 CoapParser parser = CoapParser();
 CoapBuilder builder = CoapBuilder();
@@ -77,6 +81,9 @@ void setup() {
   initializeResourceList();
 
   Serial.println(F("[setup]->READY"));
+
+  //testowanie
+  testowanie();
 }
 void loop() {
   // checking the network object regularly;
@@ -84,6 +91,25 @@ void loop() {
   receiveRF24Message();
 
   receiveEthernetMessage();
+}
+
+
+
+void testowanie(){
+  globalEtagsCounter++;
+  globalEtags[0].resource = &resources[2];
+  globalEtags[0].savedValue = 0;
+  globalEtags[0].etagId = etagIdCounter++;
+  globalEtags[0].timestamp = 0;
+  globalEtags[0].details = 0;
+
+//  globalEtagsCounter++;
+//  globalEtags[1].resource = &resources[2];
+//  globalEtags[1].savedValue = 1;
+//  globalEtags[1].etagId = etagIdCounter++;
+//  globalEtags[1].timestamp = 0;
+//  globalEtags[1].details = 0;
+
 }
 
 
@@ -108,7 +134,7 @@ void initializeResourceList() {
   resources[2].uri = "sensor/button";
   resources[2].resourceType = "Button";
   resources[2].interfaceDescription = "state";
-  resources[2].value = 0;
+  resources[2].value = 1;
   resources[2].flags = B00000101;
 
   // metryka PacketLossRate
@@ -265,7 +291,7 @@ void getCoapClienMessage() {
   switch (parser.parseCodeDetail(ethMessage)) {
     case DETAIL_EMPTY:
       if ( (parser.parseType(ethMessage) == TYPE_ACK) || (parser.parseType(ethMessage) == TYPE_RST) ) {
-        receiveEmptyRequest(ethMessage, remoteIp, remotePortNumber);
+        receiveEmptyRequest();
         return;
       }
       break;
@@ -277,7 +303,7 @@ void getCoapClienMessage() {
       break;
     case DETAIL_PUT:
       if ( (parser.parseType(ethMessage) == TYPE_CON) || (parser.parseType(ethMessage) == TYPE_NON) ) {
-        receivePutRequest(ethMessage, remoteIp, remotePortNumber);
+        //receivePutRequest();
         return;
       }
       break;
@@ -321,9 +347,9 @@ void getCoapClienMessage() {
       -
 */
 void receiveGetRequest() {
-
   Serial.println(F("[RECEIVE][COAP][GET]->START..."));
- 
+
+  uint8_t etagOptionValue = 0; // serwer nadaje wartosci powyzej 1
   uint8_t observeOptionValue = 2; // klient może wysłac jedynie 0 lub 1
   char uriPath[20] = "";
   uint8_t acceptOptionValue = 0;
@@ -344,13 +370,16 @@ void receiveGetRequest() {
     else {
       /* szukamy opcji Etag oraz Observe */
       while ( optionNumber != URI_PATH && optionNumber != NO_OPTION) {
-        if ( optionNumber == OBSERVE ) {
-           /* wystąpiła opcja OBSERVE, zapisz jej zawartość */
-           observeOptionValue = parser.fieldValue[0];
+        if ( optionNumber == ETAG ) {
+          /* wystąpiła opcja ETAG, zapisz jej zawartość */
+          etagOptionValue = parser.fieldValue[0];
+          Serial.println(F("[SEND][COAP][get]->etagValue"));
+          Serial.println(etagOptionValue);
         }
-
-
-        
+        if ( optionNumber == OBSERVE ) {
+          /* wystąpiła opcja OBSERVE, zapisz jej zawartość */
+          observeOptionValue = parser.fieldValue[0];
+        }
         optionNumber = parser.getNextOption(ethMessage, messageLen);
       } // end of while loop
     } // end of else
@@ -405,9 +434,6 @@ void receiveGetRequest() {
   }
   /*---koniec wczytywania opcji-----------------------------------------------------------------------------*/
 
-  /*---zabronione kombinacje opcji---*/
-  /*---koniec zabronionych kombinacji opcji---*/
-
   /* sprawdzamy, czy wskazanym zasobem jest well.known/core*/
   if ( strcmp(resources[0].uri, uriPath ) == 0 ) {
     /* wysyłamy wiadomosc zwrotna z ladunkiem w opcji blokowej */
@@ -426,6 +452,14 @@ void receiveGetRequest() {
         Serial.println(F("[RECEIVE][COAP][GET]->Resource Number:"));
         Serial.println(resourceNumber);
 
+        
+        /*-----analiza zawartości opcji BLOCK-----------------------------------------------------------------------------*/  
+        if (blockOptionValue != 255) { // inne wartosci sa krótsze od 16B
+          blockOptionValue = (blockOptionValue & 0x07);
+        }
+        /*-----koniec analizy zawartości opcji BLOCK-----------------------------------------------------------------------------*/ 
+
+        
         /*-----analiza zawartości opcji OBSERVE-----------------------------------------------------------------------------*/     
         /* 0 - jeżeli dany klient nie znajduje się na liście obserwatorów to go dodajemy */
         /* 1 -  jeżeli dany klienta znajduje sie na liscie obserwatorów to usuwamy go */
@@ -478,13 +512,19 @@ void receiveGetRequest() {
                       
                       observators[observatorIndex].ipAddress = remoteIp;
                       observators[observatorIndex].portNumber = remotePortNumber;
-                      builder.byteArrayCopy(observators[observatorIndex].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)));
+                      observators[observatorIndex].tokenLen = parser.parseTokenLen(ethMessage);
+                      tokenCopy(observators[observatorIndex].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)), observators[observatorIndex].tokenLen);
+                      
                       observators[observatorIndex].resource = &resources[resourceNumber];
                       for ( int i = 0; i < MAX_ETAG_CLIENT_COUNT; i++) {
                         observators[observatorIndex].etagsKnownByTheObservator[i] = 0;
                       }
                       observators[observatorIndex].etagCounter = 0;
-                      observators[observatorIndex].details = 0;                   
+                      observators[observatorIndex].details = 0; 
+
+                      //testowanie
+                      observators[observatorIndex].etagCounter++;
+                      observators[observatorIndex].etagsKnownByTheObservator[0] = &globalEtags[0];
                       break;
                     }
                   }
@@ -508,10 +548,189 @@ void receiveGetRequest() {
             return;
           }
         } // sprawdzenie !=2
-        /*-----koniec analizy wartości observe----------------------------------------------------------------------------- */
+        /*-----koniec analizy opcji observe----------------------------------------------------------------------------- */
+
+
+        /*-----analiza zawartości opcji ETAG-----------------------------------------------------------------------------*/     
+        if (  etagOptionValue != 0 ) {
+          uint8_t etagIndex = MAX_ETAG_CLIENT_COUNT + 1;
+          uint8_t etagGlobalIndex = MAX_ETAG_COUNT + 1;
+          
+          boolean validResponse = false;
+          boolean contentWithEtagResponse = false;
+          uint8_t createdSessionNumber = 0;
+          
+          /* sprawdzamy, czy dany klient jest zapisany na liście obserwatorów - tylko wtedy dzialaja etagi */
+          observatorIndex = checkIfClientIsObserving(resourceNumber);
+
+          Serial.println(F("[RECEIVE][COAP][GET]->observatorIndex"));
+          Serial.println(observatorIndex);
+            
+          /* klient nie jest zapisany na liscie obserwatorow */
+          if ( observatorIndex == MAX_OBSERVATORS_COUNT + 1 ) {
+            /* wyslij blad bad_request */
+            sendErrorResponse(BAD_REQUEST, "CLIENT IS NOT ALLOWED TO USE ETAGS");
+            return;
+          }
+          
+          /* klient jest zapisany na liscie obserwatorow */
+          else {
+            /* przeszukujemy liste etagow znanych klientowi*/
+            for ( uint8_t index = 0; index < observators[observatorIndex].etagCounter; index++ ) {
+              if ( observators[observatorIndex].etagsKnownByTheObservator[index]->etagId == etagOptionValue ) {
+                /* znaleziono etag pasujący do żądanego */
+                etagIndex = index;
+
+                Serial.println(F("[RECEIVE][COAP][GET]->znaleziono etag pasujący do żądanego  "));
+                Serial.println(etagIndex);
+                
+                /* wartość jest aktualna */
+                if ( observators[observatorIndex].etagsKnownByTheObservator[etagIndex]->savedValue == resources[resourceNumber].value ) {
+                  Serial.println(F("[RECEIVE][COAP][GET]->wartosc aktualna  "));
+                  
+                  createdSessionNumber = addNewSessionConnectedWithConServerMessage(observatorIndex);
+                  
+                  /* znaleziono wolna sesje */
+                  if( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
+                    /* uzupełnij sesje */
+                    sessions[createdSessionNumber].etag = observators[observatorIndex].etagsKnownByTheObservator[etagIndex];
+                    sessions[createdSessionNumber].etag->timestamp = (millis() / 1000);
+                    sessions[createdSessionNumber].sessionTimestamp = sessions[createdSessionNumber].etag->timestamp;
+                    
+                    /* wysyłamy wiadomość 2.03 Valid z opcją Etag, bez payloadu i kończymy wykonywanie funkcji */
+                    validResponse = true;
+                  }
+                  /* brak wolnej sesji */
+                  else {
+                    sendErrorResponse(INTERNAL_SERVER_ERROR, "TOO MUCH REQUESTS");
+                    return;
+                  }
+                }
+
+                /* wartosc nie jest aktualna */
+                else {
+                  Serial.println(F("[RECEIVE][COAP][GET]->wartosc nieaktualna  "));
+                  /* szukamy, czy dany zasób ma już przypisany etag do takiej wartości jaką ma obecnie */
+                  for (uint8_t globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
+                    if ( globalEtags[globalIndex].details < 128 ) {
+                      if ( strcmp(globalEtags[globalIndex].resource->uri, resources[resourceNumber].uri ) == 0) {
+                        if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].value ) {
+                          Serial.println(F("[RECEIVE][COAP][GET]->jest globalny etag "));
+                          Serial.println(globalIndex);
+                          etagGlobalIndex = globalIndex;
+                        }
+                      }
+                    }
+                  }// koniec fora
+
+                  /* szukany zasob ma przypisany globalny etag z aktualna wartoscia */
+                  if ( etagGlobalIndex != MAX_ETAG_COUNT + 1 ) {
+                    Serial.println(F("[RECEIVE][COAP][GET]->0"));
+                    /* sprawdzamy, czy uzytkownik wie o tym etagu */
+                    boolean etagIsKnownByObservator = false;
+                    for ( uint8_t index = 0; index < MAX_ETAG_CLIENT_COUNT; index++){
+                      if ( observators[observatorIndex].etagsKnownByTheObservator[index] == &globalEtags[etagGlobalIndex] ){
+                        etagIsKnownByObservator = true;
+                        etagIndex = index;
+                      }
+                    }
+                    
+                    
+                    /* mozemy przypisac etag do etagow znanych klientowi */
+                    if ( observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT || etagIsKnownByObservator ) {
+                      /* szukamy wolnej sesji */
+                      createdSessionNumber = addNewSessionConnectedWithConServerMessage(observatorIndex);                     
+                      Serial.println(F("[RECEIVE][COAP][GET]->1"));
+                      /* znaleziono wolna sesje */
+                      if( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
+
+                        if(!etagIsKnownByObservator) {
+                          /* dodajemy etag do listy etagow znanych klientowi */
+                          observators[observatorIndex].etagsKnownByTheObservator[observators[observatorIndex].etagCounter++] = &globalEtags[etagGlobalIndex];
+                          etagIndex = observators[observatorIndex].etagCounter - 1;
+                        }
+                        
+                        /* uzupełnij sesje */
+                        sessions[createdSessionNumber].etag = observators[observatorIndex].etagsKnownByTheObservator[etagIndex];
+                        sessions[createdSessionNumber].etag->timestamp = (millis() / 1000);
+                        sessions[createdSessionNumber].sessionTimestamp = sessions[createdSessionNumber].etag->timestamp;
+                        
+                        /* wysylamy wiadomosc 2.05 z opcja etag wskazujaca na nowy etag przypisany klientowi */
+                        contentWithEtagResponse = true;
+                        Serial.println(F("[RECEIVE][COAP][GET]->2"));
+                      }
+                    }
+                  }
+                  /* szukany zasob nie ma przypisanego globalnego etaga z aktualna wartoscia */
+                  else {
+                    /* mozemy stworzyc nowy etag */
+                    if ( (globalEtagsCounter < MAX_ETAG_COUNT) && (observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT) ) {
+                      /* mozemy przypisac nowy etag do etagow znanych obserwatorowi */
+                      if ( observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ) {
+                        /* szukamy wolnej sesji */
+                        createdSessionNumber = addNewSessionConnectedWithConServerMessage(observatorIndex);
+
+                        /* wolna sesja */
+                        if( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
+                          /* stworz nowy globalny etag */
+                          for ( uint8_t globalIndex = 0; globalIndex < MAX_ETAG_COUNT; globalIndex++) {
+                            if ( globalEtags[globalIndex].details >= 128 ) {
+                              etagGlobalIndex = globalIndex;
+                              
+                              globalEtagsCounter++;
+                              globalEtags[globalIndex].resource = &resources[resourceNumber];
+                              globalEtags[globalIndex].savedValue = resources[resourceNumber].value;
+                              globalEtags[globalIndex].etagId = etagIdCounter++;
+                              globalEtags[globalIndex].timestamp = 0;
+                              globalEtags[globalIndex].details = 0;
+                              break;    
+                            }
+                          }
+
+                          /* przypisz adres nowego etaga do tablicy etagow skojarzonych z klientem */
+                          observators[observatorIndex].etagsKnownByTheObservator[observators[observatorIndex].etagCounter++] = &globalEtags[etagGlobalIndex];
+                          etagIndex = observators[observatorIndex].etagCounter - 1;
+
+                          /* uzupełnij sesje */
+                          sessions[createdSessionNumber].etag = observators[observatorIndex].etagsKnownByTheObservator[etagIndex];
+                          sessions[createdSessionNumber].etag->timestamp = (millis() / 1000);
+                          sessions[createdSessionNumber].sessionTimestamp = sessions[createdSessionNumber].etag->timestamp;
+                           
+                          /* wysylamy wiadomosc 2.05 z opcja etag wskazujaca na nowy etag przypisany klientowi */
+                          contentWithEtagResponse = true;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+           
+            /* nie znaleziono wskazanego etaga na liscie etagow skojarzonych z klientem */
+            if(etagIndex == MAX_ETAG_CLIENT_COUNT + 1) {
+              sendErrorResponse(BAD_REQUEST, "ETAG NOT FOUND");
+              return;
+            }
+          }
+          
+          /* wyslij wiadomosci zwrotne */
+          if (validResponse || contentWithEtagResponse) {
+            sendEtagResponse(createdSessionNumber, validResponse, blockOptionValue);
+            return;
+          }
+          else {
+            sendContentResponse(resourceNumber, true, blockOptionValue);
+            return;
+          }
+        }
+        /*-----koniec analizy opcji ETAG----------------------------------------------------------------------------- */
 
 
 
+
+        /*-----analiza wiadomości URI-PATH + OBSERVE----------------------------------------------------------*/
+        
+        /*-----koniec analizy wiadomości URI-PATH + OBSERVE-------------------------------------------------- */
 
 
         
@@ -520,12 +739,7 @@ void receiveGetRequest() {
         Serial.println(F("[RECEIVE][COAP][GET]->Only Uri Path"));
         Serial.println(resources[resourceNumber].value);
         
-        /*           Block value processing        */
-        if (blockOptionValue != 255) { // inne wartosci sa krótsze od 16B
-          sendContentResponse(resourceNumber , false, (blockOptionValue & 0x07));
-        } else {
-          sendContentResponse(resourceNumber , false, 255);
-        }
+        sendContentResponse(resourceNumber , false, blockOptionValue);
         return;
         /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
 
@@ -538,31 +752,6 @@ void receiveGetRequest() {
     sendErrorResponse(NOT_FOUND, "RESOURCE NOT FOUND");
   }
 }
-
-
-void getCharValueFromResourceValue(char* charValue, unsigned long value, uint16_t requestedType) {
-  switch (requestedType) {
-    case 0:
-      /* plain-text */
-      if (value > 10) {
-        charValue[0] = value / 10 + '0';
-        charValue[1] = (value % 10) + '0';
-        charValue[2] = '\0';
-      } else {
-        charValue[0] = value + '0';
-        charValue[1] = '\0';
-      }
-      break;
-  }
-}
-
-/**
-   Metoda odpowiedzialna za wyszukiwanie klienta w liście obserwatorów
-*/
-int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, int observatorIndex, int resourceNumber) {
-  return -1;
-}
-
 /**
    Metoda odpowiedzialna za obsługe wiadomości ACK i RST
    Takie wiaodmości mogą być wysłane jedynie w odpowiedzi na wiadomość aktualizacyjną stan zasobu
@@ -574,27 +763,39 @@ int checkIfClientIsObserving(char* message, IPAddress ip, uint16_t portNumber, i
       - szukamy klienta w liscie obserwatorów
       - zmieniamy stan obserwatora na wolny (usuwamy klienta)
 */
-void receiveEmptyRequest(char* message, IPAddress ip, uint16_t portNumber) {
+void receiveEmptyRequest() {
+    Serial.println(F("[RECEIVE][COAP]->receiveEmptyRequest"));
+  
+  /* przeszukujemy liste sesji */
+  for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+    if (sessions[sessionNumber].details < 128) {    
+      /* sesja zajęta */
+      if ( sessions[sessionNumber].ipAddress == remoteIp ) {
+        if ( sessions[sessionNumber].portNumber == remotePortNumber ) {
+          /* znaleźliśmy sesję związana z danym klientem */
+          if ( parser.parseType(ethMessage) == TYPE_ACK ) {
+            /* zmień status sesji na wolny */
+            Serial.println(F("[RECEIVE][COAP]->kasuje sesji:"));
+            sessions[sessionNumber].details = 128;
+            return;
+          }
+          if ( parser.parseType(ethMessage) == TYPE_RST ) {
+            /* szukamy obserwatora w sesji*/
+            uint8_t observatorIndex = checkIfClientIsObserving((sessions[sessionNumber].etag->resource->flags & 0x1c) - 1);
 
-}
+            /* znalezlismy klienta na liscie obserwatorow */
+            if (observatorIndex != MAX_OBSERVATORS_COUNT + 1){
+              /* usuwamy klienta z listy obserwatorów */
+              observators[observatorIndex].details = 128;
 
-/*
-    Metoda odpowiedzialna za analizę wiadomości typu PUT:
-    Wiadomość zawiera opcje: URI-PATH, CONTENT-FORMAT oraz payload z nową wartością;
-    - odczytujemy opcję URI-PATH (jak nie ma, wysyłamy błąd BAD_REQUEST);
-    - szukamy zasobu na serwerze (jak nie ma, wysyłmy bład NOT_FOUND);
-    - jeżeli zasób nie ma możliwości zmiany stanu, wtedy wysyłamy bład METHOD_NOT_ALLOWED;
-    - szukamy wolnej sesji (jeżeli brak, odrzucamy wiadomość z błędem serwera INTERNAL_SERVER_ERROR;
-    - odczytujemy format zasobu (jak nie ma, wysyłamy bład BAD_REQUEST);
-    - jeżeli format zasobu jest inny niż PlainText, Json, XMl to zwróc bład METHOD_NOT_ALLOWED;
-    - odczytujemy zawartość PAYLOADu (jeśli długość zerowa, wysyłamy bład BAD_REQUEST);
-    - sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy;
-    - wyślij żądanie zmiany stanu zasobu do obiektu IoT;
-
-    -TO_DO: obsługa XML i JSONa
-*/
-void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
-
+              /* zmień status sesji na wolny */
+              sessions[sessionNumber].details = 128;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 
@@ -656,23 +857,24 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
 
   builder.init();
   Serial.println(F("[sendContentResponse] build init"));
-  Serial.println(blockValue);
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
 
   /* kod wiaodmości 2.05 CONTENT */
   builder.setCodeClass(CLASS_SUC);
   builder.setCodeDetail(5);
-  Serial.println(F("[sendContentResponse] build setCodeDetail"));
   builder.setMessageId(messageId++);
+  
   uint8_t tokenLen = parser.parseTokenLen(ethMessage);
   byte* token = parser.parseToken(ethMessage, tokenLen);
   builder.setToken(token, tokenLen);
-  Serial.println(F("[sendContentResponse] build tokenLen"));
-  //if (addObserveOption) {
-  //  builder.setOption(OBSERVE, ++observeCounter);
-  //  }
 
+  
+  if (addObserveOption) {
+    char charValueObserve[5];
+    getCharValueFromResourceValue(charValueObserve, observeCounter++, 1);
+    builder.setOption(OBSERVE, charValueObserve);
+  }
   builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
   if ((blockValue & 0x07) != 7) {
     char blockString[2];
@@ -680,10 +882,10 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
     blockString[1] = '\0';
     builder.setOption(BLOCK2, blockString);
   }
+  
   char charValue[5];
   getCharValueFromResourceValue(charValue, resources[resourceNumber].value, 0);
   builder.setPayload(charValue);
-  Serial.println(F("[sendContentResponse] build setPayload"));
   
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
  
@@ -724,20 +926,20 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
   for (int i = 1; i < 4 + (blockValue & 0x07); i++) {
     blockSize *= 2;
   }
-  Serial.println(blockSize);
+//  Serial.println(blockSize);
   blockString[1] = '\0';
-  Serial.println(resources[0].size);
-  Serial.println(((blockValue & 0xf0) >> 4));
-  Serial.println(blockSize * ((blockValue & 0xf0) >> 4));
-  Serial.println(resources[0].size - blockSize * ((blockValue & 0xf0) >> 4));
+//  Serial.println(resources[0].size);
+//  Serial.println(((blockValue & 0xf0) >> 4));
+//  Serial.println(blockSize * ((blockValue & 0xf0) >> 4));
+//  Serial.println(resources[0].size - blockSize * ((blockValue & 0xf0) >> 4));
   if (resources[0].size > blockSize * (((blockValue & 0xf0) >> 4) + 1)) {
     // 8 - ustawiamy 4. najmłodszy bit na 1, jeśli jest jeszcze cos do wysłania
     blockString[0] = (blockValue & 0xf7) + 8;
   } else {
     blockString[0] = (blockValue & 0xf7);
   }
-  Serial.println(blockValue & 0xf7);
-  Serial.println(blockString[0], BIN);
+///  Serial.println(blockValue & 0xf7);
+//Serial.println(blockString[0], BIN);
   builder.setOption(BLOCK2, blockString);
 
 
@@ -747,11 +949,92 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
   /* wyślij utworzoną wiaodmość zwrotną */
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
 }
+/**
+ * Metoda odpowiedzialna za wysylanie wiadomosci zwrotnej na wiadomosc zawierajaca Etag
+ * - wysylana jest wiadomosc 2.05 content z opcja etag, observe, content_type, block i paylodem
+ * lub
+ * - wysylana jest wiaodmosc 2.03 valid z opcja etag, observe, block
+ */
+void sendEtagResponse(uint8_t sessionNumber, boolean isValid, uint8_t blockValue){
+  Serial.println(F("[SEND][COAP][sendEtagResponse]->START"));
+  Serial.println(isValid);
+  
+  builder.init();
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_CON);
 
+  builder.setCodeClass(CLASS_SUC);
+  if(isValid){
+    builder.setCodeDetail(3);
+  }
+  else {
+    builder.setCodeDetail(5);
+  }
+  builder.setMessageId(sessions[sessionNumber].messageID);
+
+  uint8_t tokenLen = sessions[sessionNumber].tokenLen;
+  byte* token = sessions[sessionNumber].token;
+  builder.setToken(token, tokenLen);
+
+  char charEtagValue[5];
+  getCharValueFromResourceValue(charEtagValue, sessions[sessionNumber].etag->etagId, 1);
+  builder.setOption(ETAG, charEtagValue);
+  Serial.println(sessions[sessionNumber].etag->etagId);
+
+  char charObserveValue[5];
+  getCharValueFromResourceValue(charObserveValue, observeCounter++, 1);
+  builder.setOption(OBSERVE, charObserveValue);
+  Serial.println(observeCounter);
+
+  if(!isValid){
+    builder.setOption(12, PLAIN_TEXT);
+  }
+  
+//  if ((blockValue & 0x07) != 7) {
+//    char blockString[2];
+//    blockString[0] = blockValue;
+//    blockString[1] = '\0';
+//    builder.setOption(BLOCK2, blockString);
+//  }
+
+  if(!isValid){
+    char charPayloadValue[5];
+    getCharValueFromResourceValue(charPayloadValue, sessions[sessionNumber].etag->savedValue, 0);
+    builder.setPayload(charPayloadValue);
+  }
+
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
+}
 // END:CoAP_Methodes-----------------------------
 
 
 // START:CoAP_Get_Methodes----------------------
+void getCharValueFromResourceValue(char* charValue, unsigned long value, uint16_t requestedType) {
+  switch (requestedType) {
+    case 0:
+      /* plain-text */
+      if (value > 10) {
+        charValue[0] = value / 10 + '0';
+        charValue[1] = (value % 10) + '0';
+        charValue[2] = '\0';
+      } else {
+        charValue[0] = value + '0';
+        charValue[1] = '\0';
+      }
+      break;
+    case 1:
+      /* value is already in plain text, only convert to char */
+      if (value > 10) {
+        charValue[0] = value / 10;
+        charValue[1] = (value % 10);
+        charValue[2] = '\0';
+      } else {
+        charValue[0] = value;
+        charValue[1] = '\0';
+      }
+      break;
+  }
+}
 /**
    Metoda odpowiedzialna za wyszukiwanie klienta w liście obserwatorów
    - metoda zwraca indeks elementu w tablicy observators
@@ -787,9 +1070,9 @@ uint8_t checkIfClientIsObserving(int resourceNumber) {
  * - jeżeli tablice są rowne to zwraca 0
  * - jezeli tablice sa rozne to zwraca 1
  */
-uint8_t tokenCompare(byte* a, byte* b, size_t len){
+uint8_t tokenCompare(byte* a, byte* b, size_t originTokenLen){
   boolean same = true;
-    for( uint8_t number=0; number < len; number++) {
+    for( uint8_t number=0; number < originTokenLen; number++) {
       if (b[number] != a[number]) {
         same = false;
       }
@@ -801,6 +1084,41 @@ uint8_t tokenCompare(byte* a, byte* b, size_t len){
     else {
       return 1;
     }
+}
+/**
+ * Metoda kopiująca zawartość tokena
+ */
+void tokenCopy(byte* to, byte* from, size_t originTokenLen) {
+  for ( uint8_t number=0; number < originTokenLen; number++) {
+    to[number] = from[number];
+  }
+
+  /* uzupelniam reszte miejsc zerami */
+  while ( originTokenLen < MAX_TOKEN_LEN ){
+    to[originTokenLen++] = 0;
+  }
+}
+/**
+ * Metoda służaca do dodawania nowej sesji zwiazanej z wiadomoscia CON wyslana przez serwer
+ * - zwraca numer sesji utworzonej
+ * - jezeli nie ma wolnej sesji to zwraca MAX_SESSIONS_COUNT + 1
+ */
+uint8_t addNewSessionConnectedWithConServerMessage(uint8_t observatorIndex){
+  for ( uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
+    if ( sessions[sessionNumber].details >= 128 ) {
+      /* sesja wolna */
+      
+      sessions[sessionNumber].ipAddress = remoteIp;
+      sessions[sessionNumber].portNumber = remotePortNumber;
+      sessions[sessionNumber].messageID = messageId++;
+      sessions[sessionNumber].details = 0;  // active, put, text   
+      
+      tokenCopy(sessions[sessionNumber].token, observators[observatorIndex].token, observators[observatorIndex].tokenLen);
+      sessions[sessionNumber].tokenLen = observators[observatorIndex].tokenLen;
+      return sessionNumber;
+    } 
+  } 
+  return MAX_SESSIONS_COUNT + 1; 
 }
 // END:CoAP_Get_Methodes------------------------
 
@@ -927,17 +1245,28 @@ bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* 
 */
 void getMessageFromThing(byte message) {
   Serial.println(F("[RECEIVE][MINI]->Start"));
-
+  
   if ( ((message & 0xc0) >> 6) == RESPONSE_TYPE ) {
     for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
         // aktualizujemy zawartość value w zasobie
-        strcpy(resources[resourceNumber].value, (message & 0x07));
+        resources[resourceNumber].value = (message & 0x07);
 
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
+        for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+          if ( ((sessions[sessionNumber].details & 0x80) == 128)
+               && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
+            if ( ((sessions[sessionNumber].details & 0x60) >> 5) == 1 ) {
+              // PUT
+              //sendPutResponse(&sessions[sessionNumber]);
 
+              /* zmień stan sesji na wolny */
+              sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
+            }
+          }
+        }
       }
       // jeżeli nie odnaleźliśy zasobu to porzucamy wiadomość
     }
