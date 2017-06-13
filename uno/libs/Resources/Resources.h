@@ -11,7 +11,7 @@
 
 //const char NO_CONTENT_FORMAT[] = "NO CONTENT-FORMAT";
 
-const uint16_t CON_TIMEOUT = 3000;
+const uint16_t CON_TIMEOUT = 5000;
 const uint8_t RESOURCES_COUNT = 6;
 const uint8_t MAX_SESSIONS_COUNT = 2;
 const uint8_t MAX_ETAG_COUNT = 2; 	//globalnie
@@ -175,7 +175,7 @@ struct Session {
   
   uint16_t messageID;  // do weryfikowania, czy nasza odpowiedź została potwierdzona
   Etag* etag;
-  uint8_t sessionTimestamp;
+  uint16_t sessionTimestamp;
   
   byte token[MAX_TOKEN_LEN];
   size_t tokenLen;

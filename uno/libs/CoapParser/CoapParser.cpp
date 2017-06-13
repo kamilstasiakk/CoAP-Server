@@ -216,9 +216,15 @@ uint8_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
 }
 
 
-byte* CoapParser::parsePayload(char* message, uint8_t messageLen) {
+byte* CoapParser::parsePayload(byte* message, uint8_t messageLen) {
   for (int i = 4 + parseTokenLen(message); i < messageLen; i++) {
+	  Serial.println(F("parsePayload"));
+	  Serial.println(i);
+	  Serial.println(message[i]);
     if (message[i] == 255) {
+		Serial.println(F("parsePayload - > IFFFF"));
+        Serial.println(i);
+        Serial.println(message[i + 1]);
 		fieldValue[0] = message[i + 1];
 		fieldValue[1] = '\0';
 		return fieldValue;
