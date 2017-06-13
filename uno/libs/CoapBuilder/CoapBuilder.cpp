@@ -24,6 +24,7 @@ void CoapBuilder::init()
   message[4] = '\0';
   _lastOptionStart = 4;
   _messageLen = 4;
+  _lastOptionNum = 0;
 }
 
 void CoapBuilder::setVersion(uint8_t value)
@@ -167,7 +168,7 @@ void CoapBuilder::setOption(uint32_t optionNumber, char* value)
   if (_lastOptionLen == 0) {
 	  _lastOptionLen = 1;
   }
-  _lastOptionNum = optionNumber;
+  _lastOptionNum = optionNumber + _lastOptionNum;
   
   //writing option number 
   if (optionNumber < 13) {

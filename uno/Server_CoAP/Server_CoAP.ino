@@ -983,13 +983,13 @@ void sendErrorResponse(IPAddress ip, uint16_t portNumber, char* message, uint16_
     - CODE = 0.00 (CLASS_REQ + DETAIL_EMPTY)
     - MessageID = MessageID z wiadomości;
 */
-void sendEmptyAckResponse(Session * session) {
+void sendEmptyAckResponse(uint8_t sessionNumber) {
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_ACK);
   builder.setCodeClass(CLASS_REQ);
   builder.setCodeDetail(DETAIL_EMPTY);
-  builder.setMessageId(session->messageID);
+  builder.setMessageId(sessions[sessionNumber]->messageID);
   
   sendEthernetMessage(builder.build(), builder.getResponseSize(), session->ipAddress, session->portNumber);
 }

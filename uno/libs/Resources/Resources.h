@@ -9,6 +9,7 @@
     Piotr Kucharski;
 */
 
+//const char NO_CONTENT_FORMAT[] = "NO CONTENT-FORMAT";
 
 const uint8_t RESOURCES_COUNT = 6;
 const uint8_t MAX_SESSIONS_COUNT = 2;
@@ -177,8 +178,8 @@ struct Session {
   size_t tokenLen;
   uint8_t sensorID;
   /*
-      7     |6 5  |   4 3 2 1 0   |
-      STAN  | TYP | CONTENT_TYPE  |
+      7     |6 5  |   4 3 2 1   |	0 		|
+      STAN  | TYP | CONTENT_TYPE|	CON/NON  |
 
       STAN          - 0.active / 1.nonactive
       TYP           - 1.put / 0.conFromServer
