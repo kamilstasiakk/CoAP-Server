@@ -216,10 +216,15 @@ uint8_t CoapParser::computeOptLenOffset(uint32_t optionLen) {
 }
 
 
-byte* CoapParser::parsePayload(char* message) {
-  for (int i = _payloadStart; i < strlen(message); i++) {
-    fieldValue[i - _payloadStart] = message[i];
+byte* CoapParser::parsePayload(char* message, uint8_t messageLen) {
+  for (int i = 4 + parseTokenLen(message); i < messageLen; i++) {
+    if (message[i] == 255) {
+		fieldValue[0] = message[i + 1];
+		fieldValue[1] = '\0';
+		return fieldValue;
+	}
   }
+  fieldValue[0] = '\0';
   return fieldValue;
 }
 

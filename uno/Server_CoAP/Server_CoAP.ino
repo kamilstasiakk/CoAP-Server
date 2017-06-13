@@ -922,7 +922,9 @@ void receivePutRequest(char* message, IPAddress ip, uint16_t portNumber) {
             }
 
             // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message));
+             Serial.println(F("[RECEIVE][COAP][PUT]PUTUTUTUTUT"));
+              Serial.println(parser.parsePayload(message)[0]);
+            sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(message)[0]);
             return;
           } // end of (sessions[sessionNumber].contentFormat > 127)
 

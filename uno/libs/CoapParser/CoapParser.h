@@ -49,7 +49,7 @@ class CoapParser
     // zwraca wskaznik na tablice, w ktorej zapisany jest payload, 
     //należy zczytać jego wartość przed wywołaniem kolejnej metody zwracającej char* lub
     //getOption
-    byte* parsePayload(char* message);
+    byte* parsePayload(char* message, uint8_t messageLen);
 	uint8_t getOptionLen();
   private:
 	uint8_t _optionLen;

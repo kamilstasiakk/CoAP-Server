@@ -92,8 +92,8 @@ void loop() {
   receiveEthernetMessage();
 
   for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
-    if( sessions[sessionNumber].details > 127 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
-      sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
+    if( sessions[sessionNumber].details < 128 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
+   //   sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
       sessions[sessionNumber].sessionTimestamp = millis();
     }
   }
@@ -180,7 +180,7 @@ void receiveRF24Message() {
   {
     RF24NetworkHeader header;
     byte rf24Message;
-    network.read(header, rf24Message, sizeof(rf24Message));
+    network.read(header, &rf24Message, sizeof(rf24Message));
     getMessageFromThing(rf24Message);
   }
 }
@@ -189,7 +189,7 @@ void receiveRF24Message() {
     - parametr message oznacza wiadomość, którą chcemy wysłać;
 */
 void sendRF24Message(byte message) {
-  RF24NetworkHeader header;
+  RF24NetworkHeader header(REMOTE_NODE_ID);
   network.write(header, &message, sizeof(message));
 }
 // END:RF23_Methodes----------------------------
@@ -1249,6 +1249,7 @@ bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* 
     -TO_DO: obsługa XML i JSONa
 */
 void receivePutRequest() {
+  Serial.println(F("receivePutRequest"));
   uint8_t optionNumber = parser.getFirstOption(ethMessage, messageLen);
   char uriPath[20] = "";
   if ( optionNumber != URI_PATH ) {
@@ -1317,11 +1318,15 @@ void receivePutRequest() {
 
         // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
         if ( parser.parseType(ethMessage) == TYPE_CON ) {
+          Serial.println(F("CON"));
           sendEmptyAckResponse(sessionNumber);
         }
+        Serial.println(F("NON"));
+        Serial.println(parser.parsePayload(ethMessage, messageLen)[0]);
+        Serial.println(parser.parsePayload(ethMessage, messageLen)[0] - '0');
         //sendPutResponse(sessionNumber, 2);
         // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-        sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(ethMessage)[0]);
+        sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(ethMessage, messageLen)[0] - '0');
         return;
       } // end of if((resources[resourceNumber].flags & 0x02) == 2
 
@@ -1356,6 +1361,7 @@ void sendEmptyAckResponse(uint8_t sessionNumber) {
     - kod wiadomości: 2.04 suc
 */
 void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
+  Serial.println(F("sendPutResponse"));
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
@@ -1400,21 +1406,29 @@ void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
 */
 void getMessageFromThing(byte message) {
   Serial.println(F("[RECEIVE][MINI]->Start"));
-
+  Serial.println(message, BIN);
   if ( ((message & 0xc0) >> 6) == RESPONSE_TYPE ) {
+    Serial.println(F("RESPONSE_TYPE"));
     for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
         // aktualizujemy zawartość value w zasobie
+        Serial.println(F("aktualizujemy zawartość value w zasobie"));
         resources[resourceNumber].value = (message & 0x07);
 
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-          if ( ((sessions[sessionNumber].details & 0x80) == 128)
+         Serial.println(sessionNumber);
+          Serial.println(sessions[sessionNumber].details);
+          if ( ((sessions[sessionNumber].details & 0x80) < 128)
                && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
+                Serial.println(F("IFIFIFIFIIFFIFIIF"));
             if ( ((sessions[sessionNumber].details & 0x60) >> 5) == 1 ) {
               // PUT
+              Serial.println(F("getMessageFromThing->PUT"));
+              Serial.println(message & 0x07);
+              
               sendPutResponse(sessionNumber, message & 0x07);
 
               /* zmień stan sesji na wolny */
@@ -1434,11 +1448,12 @@ void getMessageFromThing(byte message) {
 */
 void sendMessageToThing(uint8_t type, uint8_t sensorID, uint8_t value) {
   Serial.println(F("[SEND][MINI]->Start"));
-
+  Serial.println(value, BIN);
   byte message;
   message = ( message | ((type & 0x03) << 6) );
   message = ( message | ((sensorID & 0x07) << 3) );
   message = ( message | (value & 0x07) );
+  Serial.println(message, BIN);
   sendRF24Message(message);
 }
 // END:Thing_Methodes
