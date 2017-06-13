@@ -11,6 +11,7 @@
 
 //const char NO_CONTENT_FORMAT[] = "NO CONTENT-FORMAT";
 
+const uint16_t CON_TIMEOUT = 3000;
 const uint8_t RESOURCES_COUNT = 6;
 const uint8_t MAX_SESSIONS_COUNT = 2;
 const uint8_t MAX_ETAG_COUNT = 2; 	//globalnie
@@ -62,6 +63,8 @@ const uint8_t DETAIL_POST = 2;
 const uint8_t DETAIL_PUT = 3;
 //code details - delete
 const uint8_t DETAIL_DELETE = 4;
+//code details - changed
+const uint8_t DETAIL_CHANGED = 4;
 
 const uint8_t DEFAULT_SERVER_VERSION = 1;
 
@@ -179,7 +182,7 @@ struct Session {
   uint8_t sensorID;
   /*
       7     |6 5  |   4 3 2 1   |	0 		|
-      STAN  | TYP | CONTENT_TYPE|	CON/NON  |
+      STAN  | TYP | CONTENT_TYPE|	isValid  |
 
       STAN          - 0.active / 1.nonactive
       TYP           - 1.put / 0.conFromServer

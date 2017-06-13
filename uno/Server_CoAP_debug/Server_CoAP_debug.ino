@@ -68,7 +68,6 @@ Session sessions[MAX_SESSIONS_COUNT];
 CoapParser parser = CoapParser();
 CoapBuilder builder = CoapBuilder();
 uint16_t messageId = 0; //globalny licznik - korzystamy z niego, gdy serwer generuje wiaodmość
-
 void setup() {
   SPI.begin();
   Serial.begin(9600);
@@ -91,6 +90,13 @@ void loop() {
   receiveRF24Message();
 
   receiveEthernetMessage();
+
+  for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
+    if((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT) {
+      sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
+      sessions[sessionNumber].sessionTimestamp = millis();
+    }
+  }
 }
 
 
@@ -138,15 +144,15 @@ void initializeResourceList() {
   resources[2].flags = B00000101;
 
   // metryka PacketLossRate
-  resources[3].uri = "metric/PLR";
-  resources[3].resourceType = "PacketLossRate";
+  resources[3].uri = "metric/CC";
+  resources[3].resourceType = "ConPacketsCount";
   resources[3].interfaceDescription = "value";
   resources[3].value = 0 ;
   resources[3].flags = B00000000;
 
   // metryka ByteLossRate
-  resources[4].uri = "metric/BLR";
-  resources[4].resourceType = "ByteLossRate";
+  resources[4].uri = "metric/NC";
+  resources[4].resourceType = "ConPacketsCount";
   resources[4].interfaceDescription = "value";
   resources[4].value = 0 ;
   resources[4].flags = B00000000;
@@ -297,6 +303,13 @@ void getCoapClienMessage() {
       break;
     case DETAIL_GET:
       if ( (parser.parseType(ethMessage) == TYPE_CON) || (parser.parseType(ethMessage) == TYPE_NON) ) {
+        if (parser.parseType(ethMessage) == TYPE_CON) {
+          resources[3].value++;
+        }
+        if (parser.parseType(ethMessage) == TYPE_NON) {
+          resources[4].value++;
+        }
+        
         receiveGetRequest();
         return;
       }
@@ -776,6 +789,7 @@ void receiveEmptyRequest() {
           if ( parser.parseType(ethMessage) == TYPE_ACK ) {
             /* zmień status sesji na wolny */
             Serial.println(F("[RECEIVE][COAP]->kasuje sesji:"));
+            resources[5].value = resources[5].value * 0,9 + (millis() - sessions[sessionNumber].sessionTimestamp) * 0,1;
             sessions[sessionNumber].details = 128;
             return;
           }
@@ -965,6 +979,7 @@ void sendEtagResponse(uint8_t sessionNumber, boolean isValid, uint8_t blockValue
 
   builder.setCodeClass(CLASS_SUC);
   if (isValid) {
+    sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xfe) + 1;
     builder.setCodeDetail(3);
   }
   else {
@@ -1009,7 +1024,7 @@ void sendEtagResponse(uint8_t sessionNumber, boolean isValid, uint8_t blockValue
 
 
 // START:CoAP_Get_Methodes----------------------
-void getCharValueFromResourceValue(char* charValue, unsigned long value, uint16_t requestedType) {
+void getCharValueFromResourceValue(char* charValue, unsigned long value, uint8_t requestedType) {
   switch (requestedType) {
     case 0:
       /* plain-text */
@@ -1268,8 +1283,10 @@ void receivePutRequest() {
   }
   Serial.println(F("URIIII"));
   Serial.println(uriPath);
-
+  Serial.println(optionNumber);
+  Serial.println(parser.fieldValue[0]);
   while (optionNumber != CONTENT_FORMAT)  {
+    Serial.println(F("WHILE"));
     //nie ma content-format! BLAD
     if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
       sendErrorResponse(BAD_REQUEST, "NO CONTENT-FORMAT");
@@ -1279,7 +1296,7 @@ void receivePutRequest() {
   }
 
   // sprawdzamy zawartość opcji ContentFormat
-  if (parser.fieldValue[0] != PLAIN_TEXT) {
+  if (parser.fieldValue[0] != PLAIN_TEXT[0]) {
     sendErrorResponse(BAD_REQUEST, "BAD content value: only text/plain allowed");
     return;
   }
@@ -1301,7 +1318,7 @@ void receivePutRequest() {
         if ( parser.parseType(ethMessage) == TYPE_CON ) {
           sendEmptyAckResponse(sessionNumber);
         }
-
+        //sendPutResponse(sessionNumber, 2);
         // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
         sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(ethMessage)[0]);
         return;
@@ -1331,7 +1348,34 @@ void sendEmptyAckResponse(uint8_t sessionNumber) {
   sendEthernetMessage(builder.build(), builder.getResponseSize(), sessions[sessionNumber].ipAddress, sessions[sessionNumber].portNumber);
 }
 
+/*
+    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta związanej z żądaniem PUT.
+    - wersja: DEFAULT_SERVER_VERSION;
+    - typ: NON
+    - kod wiadomości: 2.04 suc
+*/
+void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
+  builder.init();
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_NON);
 
+  // kod wiadomości 2.04
+  builder.setCodeClass(CLASS_SUC);
+  builder.setCodeDetail(DETAIL_CHANGED);
+
+
+  builder.setToken(sessions[sessionNumber].token, sessions[sessionNumber].tokenLen);
+  builder.setMessageId(messageId++);
+  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
+  char valueChar[2];
+  valueChar[0] = value + '0';
+  valueChar[1] = '\0';
+  builder.setPayload(valueChar);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), sessions[sessionNumber].ipAddress, sessions[sessionNumber].portNumber);
+
+  // zmieniamy sesję z aktywnej na nieaktywną
+ sessions[sessionNumber].details = ((sessions[sessionNumber].details ^ 0x80));
+}
 
 // START:Thing_Methodes----------------------------------
 /*
@@ -1370,7 +1414,7 @@ void getMessageFromThing(byte message) {
                && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
             if ( ((sessions[sessionNumber].details & 0x60) >> 5) == 1 ) {
               // PUT
-              //sendPutResponse(&sessions[sessionNumber]);
+              sendPutResponse(sessionNumber, message & 0x07);
 
               /* zmień stan sesji na wolny */
               sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
