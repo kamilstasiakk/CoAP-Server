@@ -117,6 +117,6 @@ void SendDataToServer(uint8_t type, uint8_t sensorID, uint8_t value)
   message = ( message | (value & 0x07) );
   
   RF24NetworkHeader header(REMOTE_NODE_ID);
-  network.write(header, &value, sizeof(value));          
+  network.write(header, &message, sizeof(message));          
 }
 
