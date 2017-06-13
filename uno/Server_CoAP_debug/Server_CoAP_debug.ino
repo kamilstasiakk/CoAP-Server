@@ -92,7 +92,7 @@ void loop() {
   receiveEthernetMessage();
 
   for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
-    if((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT) {
+    if( sessions[sessionNumber].details > 127 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
       sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
       sessions[sessionNumber].sessionTimestamp = millis();
     }
@@ -1311,6 +1311,7 @@ void receivePutRequest() {
         sessions[sessionNumber].messageID = parser.parseMessageId(ethMessage);
         sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
         sessions[sessionNumber].details = B00100000;
+        sessions[sessionNumber].sessionTimestamp = millis();
         // szukamy opcji ContentFormat
 
 
