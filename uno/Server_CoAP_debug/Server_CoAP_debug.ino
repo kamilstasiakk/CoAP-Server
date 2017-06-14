@@ -93,6 +93,9 @@ void loop() {
 
   for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
     if( sessions[sessionNumber].details < 128 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
+      Serial.println(F("NIEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"));
+      Serial.println(millis());
+      Serial.println(sessions[sessionNumber].sessionTimestamp);
       sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
       sessions[sessionNumber].sessionTimestamp = millis();
       sessions[sessionNumber].messageID = messageId++;
@@ -134,7 +137,7 @@ void initializeResourceList() {
   resources[1].uri = "sensor/lamp";
   resources[1].resourceType = "Lamp";
   resources[1].interfaceDescription = "state";
-  resources[1].value = 12 ; //OFF
+  resources[1].value = 1 ; //OFF
   resources[1].flags = B00000010;
 
   // przycisk
@@ -1314,6 +1317,7 @@ void receivePutRequest() {
         sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
         sessions[sessionNumber].details = B00100000;
         sessions[sessionNumber].sessionTimestamp = millis();
+        sessions[sessionNumber].tokenLen =  parser.parseTokenLen(ethMessage);
         // szukamy opcji ContentFormat
 
 
