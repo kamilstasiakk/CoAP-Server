@@ -606,34 +606,28 @@ void receiveGetRequest() {
           }
         }
         /*-----koniec analizy opcji ETAG----------------------------------------------------------------------------- */
-
-
-
+        
 
         /*-----analiza wiadomości URI-PATH + OBSERVE----------------------------------------------------------*/
         if ( observeOptionValue == 0 ) {
+          /* wyślij wiadomość NON 2.05 content wraz z opcja observe */
           sendContentResponse(resourceNumber, true, blockOptionValue);
           return;
         }
         /*-----koniec analizy wiadomości URI-PATH + OBSERVE-------------------------------------------------- */
-
-
+        
 
         /*-----analiza wiadomości jedynie z opcją URI-PATH----------------------------------------------------------*/
         /* wyslij wiadomość NON 2.05 content z opcja CONTENT_TYPE zgodną z accept lub domyślną */
-        Serial.println(F("[RECEIVE][COAP][GET]->Only Uri Path"));
-        Serial.println(resources[resourceNumber].value);
-
         sendContentResponse(resourceNumber , false, blockOptionValue);
         return;
         /*-----koniec analizy wiadomości jedynie z opcją URI-PATH------------------------------------------------- */
 
-      }  //if (strcmp(resources[resourceNumber].uri, uriPath) == 0)
-    } //for loop (przeszukiwanie zasobu)
+      }
+    }
 
     /* nie znaleziono zasobu na serwerze */
     /* wiadomość zwrotna zawierająca kod błedu 4.04 NOT_FOUND */
-    Serial.println(F("[RECEIVE][COAP][GET]->Resource not found"));
     sendErrorResponse(NOT_FOUND, "RESOURCE NOT FOUND");
   }
 }
@@ -651,26 +645,30 @@ void receiveGetRequest() {
 void receiveEmptyRequest() {
   Serial.println(F("[RECEIVE][COAP]->receiveEmptyRequest"));
 
-  /* przeszukujemy liste sesji */
+  /* przeszukujemy listę sesji */
   for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
+    /* szukamy sesji zajętej */
     if (sessions[sessionNumber].details < 128) {
-      /* sesja zajęta */
       if ( sessions[sessionNumber].ipAddress == remoteIp ) {
         if ( sessions[sessionNumber].portNumber == remotePortNumber ) {
           /* znaleźliśmy sesję związana z danym klientem */
+          
           if ( parser.parseType(ethMessage) == TYPE_ACK ) {
-            /* zmień status sesji na wolny */
             Serial.println(F("[RECEIVE][COAP]->kasuje sesji:"));
+            /* zmień status sesji na wolny */
+            sessions[sessionNumber].details = 128;      
+            
+            /* aktualizacja metryki średniego opóżnienia MAN */
             resources[5].value = (double)(resources[5].value * 0,9) + (double)((double)(millis() - sessions[sessionNumber].sessionTimestamp) * 0,1);
-            sessions[sessionNumber].details = 128;
             return;
           }
           if ( parser.parseType(ethMessage) == TYPE_RST ) {
             /* szukamy obserwatora w sesji*/
             uint8_t observatorIndex = checkIfClientIsObserving((sessions[sessionNumber].etag->resource->flags & 0x1c) - 1);
 
-            /* znalezlismy klienta na liscie obserwatorow */
             if (observatorIndex != MAX_OBSERVATORS_COUNT + 1) {
+              /* znalezlismy klienta na liscie obserwatorow */
+                          
               /* usuwamy klienta z listy obserwatorów */
               observators[observatorIndex].details = 128;
 
@@ -683,7 +681,100 @@ void receiveEmptyRequest() {
     }
   }
 }
+/*
+    Metoda odpowiedzialna za analizę wiadomości typu PUT:
+    Wiadomość zawiera opcje: URI-PATH, CONTENT-FORMAT oraz payload z nową wartością;
+    - odczytujemy opcję URI-PATH (jak nie ma, wysyłamy błąd BAD_REQUEST);
+    - szukamy zasobu na serwerze (jak nie ma, wysyłmy bład NOT_FOUND);
+    - jeżeli zasób nie ma możliwości zmiany stanu, wtedy wysyłamy bład METHOD_NOT_ALLOWED;
+    - szukamy wolnej sesji (jeżeli brak, odrzucamy wiadomość z błędem serwera INTERNAL_SERVER_ERROR;
+    - odczytujemy format zasobu (jak nie ma, wysyłamy bład BAD_REQUEST);
+    - jeżeli format zasobu jest inny niż PlainText, Json, XMl to zwróc bład METHOD_NOT_ALLOWED;
+    - odczytujemy zawartość PAYLOADu (jeśli długość zerowa, wysyłamy bład BAD_REQUEST);
+    - sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy;
+    - wyślij żądanie zmiany stanu zasobu do obiektu IoT;
+*/
+void receivePutRequest() {
+  Serial.println(F("receivePutRequest"));
+  uint8_t optionNumber = parser.getFirstOption(ethMessage, messageLen);
+  char uriPath[20] = "";
+  if ( optionNumber != URI_PATH ) {
+    if ( optionNumber > URI_PATH || optionNumber == NO_OPTION) {
+      /* pierwsza opcja ma numer większy niż URI-PATH lub wiadomośc jest bez opcji - brak wskazania zasobu */
+      sendErrorResponse(BAD_REQUEST, "NO URI");
+      return;
+    }
+    else {
+      /* szukamy opcji Etag oraz Observe */
+      while ( optionNumber != URI_PATH && optionNumber != NO_OPTION) {
+        optionNumber = parser.getNextOption(ethMessage, messageLen);
+      } 
+    }
+  } 
 
+  /* odczytujemy wartość URI-PATH */
+  if ( optionNumber != NO_OPTION ) {
+    strcpy(uriPath, parser.fieldValue);
+  }
+  else {
+    /* wiadomość nie zawierala opcji URI_PATH, ale zawiera jakies inne opcje */
+    sendErrorResponse(BAD_REQUEST, "NO URI");
+    return;
+  }
+
+  optionNumber = parser.getNextOption(ethMessage, messageLen);
+  while (optionNumber == URI_PATH) {
+    strcat(uriPath, "/");
+    strcat(uriPath, parser.fieldValue);
+    optionNumber = parser.getNextOption(ethMessage, messageLen);
+  }
+
+  while (optionNumber != CONTENT_FORMAT)  {
+    //nie ma content-format! BLAD
+    if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
+      sendErrorResponse(BAD_REQUEST, "NO CONTENT-FORMAT");
+      return;
+    }
+    optionNumber = parser.getNextOption(ethMessage, messageLen);
+  }
+
+  // sprawdzamy zawartość opcji ContentFormat
+  if (parser.fieldValue[0] != PLAIN_TEXT[0]) {
+    sendErrorResponse(BAD_REQUEST, "BAD content value: only text/plain allowed");
+    return;
+  }
+  //sparsowaliśmy uri - szukamy zasobu na serwerze
+  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
+    if (strcmp(resources[resourceNumber].uri, uriPath) == 0) {
+      // sprawdzamy, czy na danym zasobie można zmienić stan
+      if ((resources[resourceNumber].flags & 0x02) == 2) {
+        // szukamy wolnej sesji
+        uint8_t sessionNumber = addNewSessionConnectedWithConServerMessage(0);
+        tokenCopy(sessions[sessionNumber].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)), parser.parseTokenLen(ethMessage));
+        sessions[sessionNumber].messageID = parser.parseMessageId(ethMessage);
+        sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
+        sessions[sessionNumber].details = B00100000;
+        sessions[sessionNumber].sessionTimestamp = millis();
+        // szukamy opcji ContentFormat
+
+        // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
+        if ( parser.parseType(ethMessage) == TYPE_CON ) {
+          sendEmptyAckResponse(sessionNumber);
+        }
+        // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
+        sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(ethMessage, messageLen)[0] - '0');
+        return;
+      }
+
+      // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
+      sendErrorResponse(METHOD_NOT_ALLOWED, "Operation not permitted");
+
+    }
+  }
+
+  // błędne uri - brak takiego zasobu na serwerze
+  sendErrorResponse(NOT_FOUND, "NO SUCH RESOURCE");
+}
 
 
 /*
@@ -696,30 +787,31 @@ void sendErrorResponse(uint16_t errorType, char* errorMessage) {
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
 
-  /*------- set TYPE -------*/
+  /*------- ustaw TYPE -------*/
   if (parser.parseType(ethMessage) == TYPE_CON) {
     builder.setType(TYPE_ACK);
   }  else  {
     builder.setType(TYPE_NON);
   }
 
-  /*------- set CODE -------*/
+  /*------- ustaw CODE -------*/
   uint16_t codeClass = (errorType / 100);
   builder.setCodeClass(codeClass);
   builder.setCodeDetail(errorType - (codeClass * 100));
 
-  /*------- set MESSAGE ID -------*/
+  /*------- ustaw MESSAGE ID -------*/
   if (parser.parseType(ethMessage) == TYPE_CON) {
     builder.setMessageId(parser.parseMessageId(ethMessage));
   } else {
     builder.setMessageId(messageId++);
   }
 
-  /*------- set TOKEN -------*/
+  /*------- ustaw TOKEN -------*/
   uint8_t tokenLen = parser.parseTokenLen(ethMessage);
   byte* token = parser.parseToken(ethMessage, tokenLen);
   builder.setToken(token, tokenLen);
 
+  /*------- ustaw zawartość pola dany -----*/
   builder.setPayload(errorMessage);
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
 }
@@ -728,7 +820,7 @@ void sendErrorResponse(uint16_t errorType, char* errorMessage) {
     - wersja protokołu: 1;
     - typ wiadomości: NON
     - kod wiadomości: 2.05 content
-    - messageID: dowolna watość (ustawiamy jako 0);
+    - messageID: dowolna watość (ustawiamy jako wartość globalnego inkrementowanego licznika );
     - token: podany jako parametr wywołania;
     - opcja observe: jeżeli parametr addObserveOption= true to dołącz opcję observe z wartością globalną powiększoną o 1;
     - ładunek: przekazany jako parametr;
@@ -740,9 +832,7 @@ void sendErrorResponse(uint16_t errorType, char* errorMessage) {
     ale zmienił się stan zabosu i chcialby poinformowac o tym obserwatorów danego zasobu )
 */
 void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t blockValue) {
-
   builder.init();
-  Serial.println(F("[sendContentResponse] build init"));
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
 
@@ -755,7 +845,7 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
   byte* token = parser.parseToken(ethMessage, tokenLen);
   builder.setToken(token, tokenLen);
 
-
+  /* dodawanie wiadomości */
   if (addObserveOption) {
     char charValueObserve[5];
     getCharValueFromResourceValue(charValueObserve, observeCounter++, 1);
@@ -774,12 +864,10 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
   builder.setPayload(charValue);
 
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
-
-  Serial.println(F("[SEND][COAP][CONTENT_RESPONSE]->END"));
 }
 /*
-   tak jak poprzednia funkcja z następującymi wyjątkami:
-   nie ma argumentu payload, ponieważ jest on w pewnym sensie stały (well-know-core)
+   Podobnie jak poprzednia funkcja z następującymi wyjątkami:
+   - nie ma argumentu payload, ponieważ jest on w pewnym sensie stały (well-know-core)
 */
 void sendWellKnownContentResponse(uint8_t blockValue) {
   Serial.println(F("[SEND][COAP][WELL_KNOWN]"));
@@ -828,9 +916,7 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
   //Serial.println(blockString[0], BIN);
   builder.setOption(BLOCK2, blockString);
 
-
   setWellKnownCorePayload((blockValue & 0xf0) >> 4, blockSize);
-
 
   /* wyślij utworzoną wiaodmość zwrotną */
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
@@ -842,19 +928,18 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
    - wysylana jest wiaodmosc 2.03 valid z opcja etag, observe, block
 */
 void sendEtagResponse(uint8_t sessionNumber, boolean isValid, uint8_t blockValue) {
-  Serial.println(F("[SEND][COAP][sendEtagResponse]->START"));
-  Serial.println(isValid);
-
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_CON);
 
   builder.setCodeClass(CLASS_SUC);
   if (isValid) {
+    /* ustaw CodeDetail na 3 (2.03) */
     sessions[sessionNumber].details = (sessions[sessionNumber].details & 0xfe) + 1;
     builder.setCodeDetail(3);
   }
   else {
+    /* ustaw CodeDetail na 5 (2.05) */
     builder.setCodeDetail(5);
   }
   builder.setMessageId(sessions[sessionNumber].messageID);
@@ -866,13 +951,11 @@ void sendEtagResponse(uint8_t sessionNumber, boolean isValid, uint8_t blockValue
   char charEtagValue[5];
   getCharValueFromResourceValue(charEtagValue, sessions[sessionNumber].etag->etagId, 1);
   builder.setOption(ETAG, charEtagValue);
-  Serial.println(sessions[sessionNumber].etag->etagId);
 
   char charObserveValue[5];
   getCharValueFromResourceValue(charObserveValue, observeCounter++, 1);
   builder.setOption(OBSERVE, charObserveValue);
-  Serial.println(observeCounter);
-
+  
   if (!isValid) {
     builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
   }
@@ -892,10 +975,58 @@ void sendEtagResponse(uint8_t sessionNumber, boolean isValid, uint8_t blockValue
 
   sendEthernetMessage(builder.build(), builder.getResponseSize(), remoteIp, remotePortNumber);
 }
+/**
+ * Metoda odpowiedzialna za wysłanie wiadomości zwrotnej zawierającej jedynie nagłówek 4 bajtowy z codem ACK
+ */
+void sendEmptyAckResponse(uint8_t sessionNumber) {
+  builder.init();
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_ACK);
+  builder.setCodeClass(CLASS_REQ);
+  builder.setCodeDetail(DETAIL_EMPTY);
+  builder.setMessageId(sessions[sessionNumber].messageID);
+  uint8_t tokenLen = parser.parseTokenLen(ethMessage);
+  byte* token = parser.parseToken(ethMessage, tokenLen);
+  builder.setToken(token, tokenLen);
+
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), sessions[sessionNumber].ipAddress, sessions[sessionNumber].portNumber);
+}
+/*
+    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta związanej z żądaniem PUT.
+    - wersja: DEFAULT_SERVER_VERSION;
+    - typ: NON
+    - kod wiadomości: 2.04 suc
+*/
+void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
+  Serial.println(F("sendPutResponse"));
+  builder.init();
+  builder.setVersion(DEFAULT_SERVER_VERSION);
+  builder.setType(TYPE_NON);
+
+  // kod wiadomości 2.04
+  builder.setCodeClass(CLASS_SUC);
+  builder.setCodeDetail(DETAIL_CHANGED);
+
+  builder.setToken(sessions[sessionNumber].token, sessions[sessionNumber].tokenLen);
+  builder.setMessageId(messageId++);
+  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
+  char valueChar[2];
+  valueChar[0] = value + '0';
+  valueChar[1] = '\0';
+  builder.setPayload(valueChar);
+  sendEthernetMessage(builder.build(), builder.getResponseSize(), sessions[sessionNumber].ipAddress, sessions[sessionNumber].portNumber);
+
+  // zmieniamy sesję z aktywnej na nieaktywną
+ sessions[sessionNumber].details = ((sessions[sessionNumber].details ^ 0x80));
+}
 // END:CoAP_Methodes-----------------------------
 
 
 // START:CoAP_Get_Methodes----------------------
+/**
+ * Metoda odpowiedzialna za utworzenie z wartości zasobu zapisanej jako long, tablice charów.
+ * - requestedType określa, jaki sposób konwersji jest wymagany;
+ */
 void getCharValueFromResourceValue(char* charValue, unsigned long value, uint8_t requestedType) {
   switch (requestedType) {
     case 0:
@@ -939,7 +1070,6 @@ uint8_t checkIfClientIsObserving(int resourceNumber) {
       if ( strcmp(observators[observatorIndex].resource->uri, resources[resourceNumber].uri) == 0) {
         if ( observators[observatorIndex].ipAddress == remoteIp ) {
           if ( observators[observatorIndex].portNumber == remotePortNumber ) {
-            Serial.println(F("aaaaa"));
             if ( tokenCompare(observators[observatorIndex].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)), parser.parseTokenLen(ethMessage)) == 0) {
               /* znaleziono klienta na liscie obserwatorow */
               return observatorIndex;
@@ -994,7 +1124,6 @@ uint8_t addNewSessionConnectedWithConServerMessage(uint8_t observatorIndex) {
   for ( uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
     if ( sessions[sessionNumber].details >= 128 ) {
       /* sesja wolna */
-
       sessions[sessionNumber].ipAddress = remoteIp;
       sessions[sessionNumber].portNumber = remotePortNumber;
       sessions[sessionNumber].messageID = messageId++;
@@ -1011,6 +1140,9 @@ uint8_t addNewSessionConnectedWithConServerMessage(uint8_t observatorIndex) {
 
 
 // START:CoAP_WellKnown_Methodes-----------------
+/**
+ * Metoda odpowiedzialna za zbudowanie reprezentacji link-state.
+ */
 void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
   //initializacja pola payload (czyszczenie pola, dodanie znacznika)
   if (blockSize == 16) {
@@ -1023,10 +1155,7 @@ void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
   }
   currentBlock = 0;
   uint8_t freeLen = blockSize - 20;// 20 - dlugosc "</.well-known/core>,"
-  Serial.println(F("setWellKnownCorePayload->start"));
-  Serial.println(freeLen);
   for (int index = 1; index < RESOURCES_COUNT; index++ ) {
-    Serial.println(index);
     if (setWellKnownCorePartToPayload(&freeLen, blockNumber, "</", blockSize)) {
       return;
     }
@@ -1038,7 +1167,6 @@ void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
       return;
     }
     if ((resources[index].flags & 0x01) == 1 ) {
-      Serial.println(F("OBSERVE"));
       if (setWellKnownCorePartToPayload(&freeLen, blockNumber, "obs;", blockSize)) {
         return;
       }
@@ -1062,24 +1190,17 @@ void setWellKnownCorePayload(uint8_t blockNumber, uint8_t blockSize) {
     }
   }
 }
-//zwraca informacje o tym czy odpowiedni blok został już zapełniony
+/**
+ * Metoda zwraca informacje o tym, czy odpowiedni blok został juz zapełniony
+ */
 bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* message, uint8_t blockSize) {
-  Serial.println(F("setWellKnownCorePartToPayload->start"));
   if (*freeLen == 0) {
     if (currentBlock == blockNumber) {
       return true;
     }
     return false;
   }
-  Serial.println(message);
-  Serial.println(*freeLen);
-  Serial.println(strlen(message));
-  Serial.println(builder.getPayloadLen());
   if ((*freeLen) > strlen(message)) {
-    Serial.println(F("CALOSC"));
-    Serial.println(currentBlock);
-    Serial.println(blockNumber);
-    Serial.println(currentBlock == blockNumber);
     if (currentBlock == blockNumber) {
       builder.appendPayload(message);
     }
@@ -1087,174 +1208,19 @@ bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* 
   } else { //cały się nie zmiesci
     if (currentBlock == blockNumber) {
       builder.appendPayload(message, (*freeLen));
-      Serial.println(F("setWellKnownCorePartToPayload->stop1"));
       return true;
     } else {
-      Serial.println(currentBlock);
       currentBlock += 1;
-      Serial.println(currentBlock);
       if (currentBlock == blockNumber) {
         builder.appendPayload(message, (*freeLen), strlen(message));
       }
       (*freeLen) = blockSize - (strlen(message) - (*freeLen));
-      Serial.println((*freeLen));
     }
-    Serial.println(F("setWellKnownCorePartToPayload->stop2"));
   }
-  Serial.println(F("setWellKnownCorePartToPayload->stop3"));
   return false;
 }
-// START:CoAP_WellKnown_Methodes-----------------
-/*
-    Metoda odpowiedzialna za analizę wiadomości typu PUT:
-    Wiadomość zawiera opcje: URI-PATH, CONTENT-FORMAT oraz payload z nową wartością;
-    - odczytujemy opcję URI-PATH (jak nie ma, wysyłamy błąd BAD_REQUEST);
-    - szukamy zasobu na serwerze (jak nie ma, wysyłmy bład NOT_FOUND);
-    - jeżeli zasób nie ma możliwości zmiany stanu, wtedy wysyłamy bład METHOD_NOT_ALLOWED;
-    - szukamy wolnej sesji (jeżeli brak, odrzucamy wiadomość z błędem serwera INTERNAL_SERVER_ERROR;
-    - odczytujemy format zasobu (jak nie ma, wysyłamy bład BAD_REQUEST);
-    - jeżeli format zasobu jest inny niż PlainText, Json, XMl to zwróc bład METHOD_NOT_ALLOWED;
-    - odczytujemy zawartość PAYLOADu (jeśli długość zerowa, wysyłamy bład BAD_REQUEST);
-    - sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy;
-    - wyślij żądanie zmiany stanu zasobu do obiektu IoT;
+// END:CoAP_WellKnown_Methodes-----------------
 
-    -TO_DO: obsługa XML i JSONa
-*/
-void receivePutRequest() {
-  Serial.println(F("receivePutRequest"));
-  uint8_t optionNumber = parser.getFirstOption(ethMessage, messageLen);
-  char uriPath[20] = "";
-  if ( optionNumber != URI_PATH ) {
-    if ( optionNumber > URI_PATH || optionNumber == NO_OPTION) {
-      /* pierwsza opcja ma numer większy niż URI-PATH lub wiadomośc jest bez opcji - brak wskazania zasobu */
-      sendErrorResponse(BAD_REQUEST, "NO URI");
-      return;
-    }
-    else {
-      /* szukamy opcji Etag oraz Observe */
-      while ( optionNumber != URI_PATH && optionNumber != NO_OPTION) {
-        optionNumber = parser.getNextOption(ethMessage, messageLen);
-      } // end of while loop
-    } // end of else
-  } // end of if (firstOption != URI_PATH)
-
-  /* odczytujemy wartość URI-PATH */
-  if ( optionNumber != NO_OPTION ) {
-    strcpy(uriPath, parser.fieldValue);
-  }
-  else {
-    /* wiadomość nie zawierala opcji URI_PATH, ale zawiera jakies inne opcje */
-    sendErrorResponse(BAD_REQUEST, "NO URI");
-    return;
-  }
-
-  optionNumber = parser.getNextOption(ethMessage, messageLen);
-  while (optionNumber == URI_PATH) {
-    strcat(uriPath, "/");
-    strcat(uriPath, parser.fieldValue);
-    optionNumber = parser.getNextOption(ethMessage, messageLen);
-  }
-  Serial.println(F("URIIII"));
-  Serial.println(uriPath);
-  Serial.println(optionNumber);
-  Serial.println(parser.fieldValue[0]);
-  while (optionNumber != CONTENT_FORMAT)  {
-    Serial.println(F("WHILE"));
-    //nie ma content-format! BLAD
-    if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
-      sendErrorResponse(BAD_REQUEST, "NO CONTENT-FORMAT");
-      return;
-    }
-    optionNumber = parser.getNextOption(ethMessage, messageLen);
-  }
-
-  // sprawdzamy zawartość opcji ContentFormat
-  if (parser.fieldValue[0] != PLAIN_TEXT[0]) {
-    sendErrorResponse(BAD_REQUEST, "BAD content value: only text/plain allowed");
-    return;
-  }
-  //sparsowaliśmy uri - szukamy zasobu na serwerze
-  for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
-    if (strcmp(resources[resourceNumber].uri, uriPath) == 0) {
-      // sprawdzamy, czy na danym zasobie można zmienić stan
-      if ((resources[resourceNumber].flags & 0x02) == 2) {
-        // szukamy wolnej sesji
-        uint8_t sessionNumber = addNewSessionConnectedWithConServerMessage(0);
-        tokenCopy(sessions[sessionNumber].token, parser.parseToken(ethMessage, parser.parseTokenLen(ethMessage)), parser.parseTokenLen(ethMessage));
-        sessions[sessionNumber].messageID = parser.parseMessageId(ethMessage);
-        sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
-        sessions[sessionNumber].details = B00100000;
-        sessions[sessionNumber].sessionTimestamp = millis();
-        // szukamy opcji ContentFormat
-
-
-        // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
-        if ( parser.parseType(ethMessage) == TYPE_CON ) {
-          Serial.println(F("CON"));
-          sendEmptyAckResponse(sessionNumber);
-        }
-        Serial.println(F("NON"));
-        Serial.println(parser.parsePayload(ethMessage, messageLen)[0]);
-        Serial.println(parser.parsePayload(ethMessage, messageLen)[0] - '0');
-        //sendPutResponse(sessionNumber, 2);
-        // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
-        sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(ethMessage, messageLen)[0] - '0');
-        return;
-      } // end of if((resources[resourceNumber].flags & 0x02) == 2
-
-      // jeżeli otrzymaliśmy wiadomośc PUT dotyczącą obiektu, którego stanu nie możemy zmienić to wysyłamy błąd
-      sendErrorResponse(METHOD_NOT_ALLOWED, "Operation not permitted");
-
-    } // end of if (strcmp(resources[resourceNumber].uri, parser.fieldValue) == 0)
-  } // end of for loop (przeszukiwanie zasobów)
-
-  // błędne uri - brak takiego zasobu na serwerze
-  sendErrorResponse(NOT_FOUND, "No a such resource");
-}
-
-void sendEmptyAckResponse(uint8_t sessionNumber) {
-  builder.init();
-  builder.setVersion(DEFAULT_SERVER_VERSION);
-  builder.setType(TYPE_ACK);
-  builder.setCodeClass(CLASS_REQ);
-  builder.setCodeDetail(DETAIL_EMPTY);
-  builder.setMessageId(sessions[sessionNumber].messageID);
-  uint8_t tokenLen = parser.parseTokenLen(ethMessage);
-  byte* token = parser.parseToken(ethMessage, tokenLen);
-  builder.setToken(token, tokenLen);
-
-  sendEthernetMessage(builder.build(), builder.getResponseSize(), sessions[sessionNumber].ipAddress, sessions[sessionNumber].portNumber);
-}
-
-/*
-    Metoda odpowiedzialna za stworzenie i wysłanie odpowiedzi do klienta związanej z żądaniem PUT.
-    - wersja: DEFAULT_SERVER_VERSION;
-    - typ: NON
-    - kod wiadomości: 2.04 suc
-*/
-void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
-  Serial.println(F("sendPutResponse"));
-  builder.init();
-  builder.setVersion(DEFAULT_SERVER_VERSION);
-  builder.setType(TYPE_NON);
-
-  // kod wiadomości 2.04
-  builder.setCodeClass(CLASS_SUC);
-  builder.setCodeDetail(DETAIL_CHANGED);
-
-
-  builder.setToken(sessions[sessionNumber].token, sessions[sessionNumber].tokenLen);
-  builder.setMessageId(messageId++);
-  builder.setOption(CONTENT_FORMAT, PLAIN_TEXT);
-  char valueChar[2];
-  valueChar[0] = value + '0';
-  valueChar[1] = '\0';
-  builder.setPayload(valueChar);
-  sendEthernetMessage(builder.build(), builder.getResponseSize(), sessions[sessionNumber].ipAddress, sessions[sessionNumber].portNumber);
-
-  // zmieniamy sesję z aktywnej na nieaktywną
- sessions[sessionNumber].details = ((sessions[sessionNumber].details ^ 0x80));
-}
 
 // START:Thing_Methodes----------------------------------
 /*
@@ -1265,14 +1231,13 @@ void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
     type:     0-Response; 1-Get; 2-Put
     sensorID: 0-Lamp; 1-Button
     value:    Lamp: 0-OFF 1-ON  Button: 1-change state(clicked)
-
 */
 
 /*
     Metoda odpowiedzialna za przetworzenie danych zgodnie z protokołem radiowym:
     - jeżeli typ wiadomości jest inny niż RESPONSE to porzucam wiadomość;
-    - odnajdujemy sensorID w liście zasobów serwera (jeżeli brak, to odrzucamy)
-    - aktualizujemy zawartość value w zasobie zgodnie z wartością znajdującą się w wiadomości
+    - odnajdujemy sensorID w liście zasobów serwera (jeżeli brak, to odrzucamy);
+    - aktualizujemy zawartość value w zasobie zgodnie z wartością znajdującą się w wiadomości;
 
     - jeżeli jest jakaś sesja związana z danym sensorID to przekaż ją do analizy;
 */
@@ -1488,20 +1453,14 @@ void getMessageFromThing(byte message) {
   }
 }
 /*
-
     Metoda odpowiedzialna za stworzenie wiadomości zgodnej z protokołem radiowym;
 */
 void sendMessageToThing(uint8_t type, uint8_t sensorID, uint8_t value) {
-  Serial.println(F("[SEND][MINI]->Start"));
-  Serial.println(value, BIN);
   byte message;
   message = ( message | ((type & 0x03) << 6) );
   message = ( message | ((sensorID & 0x07) << 3) );
   message = ( message | (value & 0x07) );
-  Serial.println(message, BIN);
   sendRF24Message(message);
 }
 // END:Thing_Methodes
-
-
 
