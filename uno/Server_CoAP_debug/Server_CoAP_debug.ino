@@ -93,7 +93,7 @@ void loop() {
 
   for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
     if( sessions[sessionNumber].details < 128 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
-      sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
+      //sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
       sessions[sessionNumber].sessionTimestamp = millis();
       sessions[sessionNumber].messageID = messageId++;
     }
@@ -743,7 +743,10 @@ void receiveGetRequest() {
 
 
         /*-----analiza wiadomości URI-PATH + OBSERVE----------------------------------------------------------*/
-
+        if ( observeOptionValue == 0 ) {
+          sendContentResponse(resourceNumber, true, blockOptionValue);
+          return;
+        }
         /*-----koniec analizy wiadomości URI-PATH + OBSERVE-------------------------------------------------- */
 
 
@@ -1414,8 +1417,16 @@ void getMessageFromThing(byte message) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
         // aktualizujemy zawartość value w zasobie
-        Serial.println(F("aktualizujemy zawartość value w zasobie"));
-        resources[resourceNumber].value = (message & 0x07);
+        if( ((message & 0x38) >> 3) == 1 ){
+          /* aktualizacja znacznika czasowego zwiazanego z lampka */
+          resources[resourceNumber].value = millis() % 10;
+          Serial.println(F("aktualizujemy zawartość value w zasobie"));
+          Serial.println(resources[resourceNumber].value);
+        }
+        else {
+          /* aktualizacja wartosci pozostalych zasobow */
+          resources[resourceNumber].value = (message & 0x07);
+        }
 
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
@@ -1436,6 +1447,171 @@ void getMessageFromThing(byte message) {
               sessions[sessionNumber].details = (sessions[sessionNumber].details | (1 << 7));
             }
           }
+        }
+
+        /* jeżeli zasob jest obserwowalny, to wyslij do wszystkich obserwatorow wiadomosc o zmianie stanu */
+        if ((resources[resourceNumber].flags & 0x02 >> 1) == 1 ){
+            Serial.println(F("**{start}"));
+            
+            uint8_t globalEtagIndex = MAX_ETAG_COUNT + 1;
+            uint8_t createdSessionNumber = 0;
+            /* przeszukuje listę obserwatorow w poszukiwaniu aktywnych klientow */
+            for ( uint8_t observatorIndex=0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ){
+              if ( observators[observatorIndex].resource == &resources[resourceNumber] ){
+                Serial.println(F("**{obserwator}"));
+                Serial.println(observatorIndex);
+                
+                /* sprawdz, czy klient ma znany etag z ta wartoscia */
+                boolean etagFound = false;
+
+                /* przeszukiwanie lokalnej tablicy etagow obserwatora */
+                for ( uint8_t obsEtagIndex=0; obsEtagIndex < MAX_ETAG_CLIENT_COUNT; obsEtagIndex++ ){
+                  if ( observators[observatorIndex].etagsKnownByTheObservator[obsEtagIndex]-> savedValue == resources[resourceNumber].value){
+                     Serial.println(F("**{obserwator zna etaga}"));
+                     Serial.println(observators[observatorIndex].etagsKnownByTheObservator[obsEtagIndex]->etagId);
+                    
+                    /* klient zna etaga, z obecna wartoscia - wysylamy 2.03 valid*/
+                    etagFound = true;
+                    
+                    /* szukamy wolnej sesji */
+                    createdSessionNumber = addNewSessionConnectedWithConServerMessage(observatorIndex);
+
+                    /* znaleziono wolna sesje */
+                    if ( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
+                      /* uzupełnij sesje */
+                      sessions[createdSessionNumber].etag = observators[observatorIndex].etagsKnownByTheObservator[obsEtagIndex];
+                      sessions[createdSessionNumber].etag->timestamp = (millis() / 1000);
+                      sessions[createdSessionNumber].sessionTimestamp = sessions[createdSessionNumber].etag->timestamp;
+
+                      /* wysylamy wiadomosc 2.03 valid z aktywnym etagiem */
+                      sendEtagResponse(createdSessionNumber, true, 255);
+                      break;
+                    }
+                    /* brak wolnej sesji */
+                    else {
+                      /* wysylamy wiadomosc 2.05 z nowa wartoscia znacznika, opcja content type i observe */
+                      sendContentResponse(resourceNumber, true, 255); 
+                      break;
+                    }
+                  }
+                }
+
+                /* brak znanego etaga obserwatorowi */
+                if(!etagFound) {
+                  /* przeszukaj liste globalnych etagow */
+                  for ( uint8_t globalIndex=0; globalIndex < MAX_ETAG_COUNT; globalIndex++ ){
+                    if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].value ) {
+                      Serial.println(F("**{znaleziono globalny etag}"));
+                      Serial.println(globalIndex);
+                      
+                      /* znaleziono etag na liscie globalnej */
+                      globalEtagIndex = globalIndex;
+
+                      /* sprawdzamy, czy klient ma miejsce na dodanie nowego etaga */
+                      if ( observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ){
+                        /* szukamy wolnej sesji */
+                        createdSessionNumber = addNewSessionConnectedWithConServerMessage(observatorIndex);
+
+                        /* znaleziono wolna sesje */
+                        if ( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
+                            Serial.println(F("**{znaleziono globalny etag}{znaleziono wolna sesje}"));
+                            Serial.println(createdSessionNumber);
+                          
+                          /* stworz nowy wpis na liscie znanych etagow klientowi */
+                          observators[observatorIndex].etagsKnownByTheObservator[globalEtagsCounter++] = &globalEtags[globalIndex];
+                          
+                          /* uzupełnij sesje */
+                          sessions[createdSessionNumber].etag = &globalEtags[globalIndex];
+                          sessions[createdSessionNumber].etag->timestamp = (millis() / 1000);
+                          sessions[createdSessionNumber].sessionTimestamp = sessions[createdSessionNumber].etag->timestamp;
+    
+                          /* wysylamy wiadomosc 2.05 content z nowym etagiem i paylodem */
+                          sendEtagResponse(createdSessionNumber, false, 255);
+                          break;
+                        }
+                        /* brak wolnej sesji */
+                        else {
+                          /* wysylamy wiadomosc 2.05 z nowa wartoscia znacznika, opcja content type i observe */
+                          sendContentResponse(resourceNumber, true, 255); 
+                          break;
+                        }
+                      }
+                      /* brak miejsca u klienta */
+                      else {
+                        Serial.println(F("**brak miejsca w lokalnej tablicy etaga}"));
+                        sendContentResponse(resourceNumber, true, 255);
+                        break;
+                      }                   
+                    }
+                  }
+
+                  /* brak etaga na liscie globalnej */
+                  if ( globalEtagIndex == MAX_ETAG_COUNT + 1){
+                    Serial.println(F("**{brak etaga na liscie globalnej}"));
+                    /*sprawdzamy, czy jest miejsce na liscie globalnej */
+                    
+                    /* mamy miejsce */
+                    if ( globalEtagsCounter < MAX_ETAG_COUNT ){
+                      /* dodajemy nowy wpis do listy */
+                      globalEtags[globalEtagsCounter].resource = &resources[resourceNumber];
+                      globalEtags[globalEtagsCounter].savedValue = resources[resourceNumber].value;
+                      globalEtags[globalEtagsCounter].etagId = etagIdCounter++;
+                      globalEtags[globalEtagsCounter].timestamp = 0;
+                      globalEtags[globalEtagsCounter].details = 0;
+  
+                      globalEtagIndex = globalEtagsCounter;
+                      globalEtagsCounter++;
+
+                      Serial.println(F("**{ dodajemy nowy wpis do listy globalnej }"));
+
+                      /* sprawdzamy, czy klient ma miejsce na dodanie nowego etaga */
+                      if ( observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ){
+                        /* szukamy wolnej sesji */
+                        createdSessionNumber = addNewSessionConnectedWithConServerMessage(observatorIndex);
+                        
+                        /* znaleziono wolna sesje */
+                        if ( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
+                          Serial.println(F("**{ dodajemy nowy wpis do listy globalnej }"));
+                          
+                          /* stworz nowy wpis na liscie znanych etagow klientowi */
+                          observators[observatorIndex].etagsKnownByTheObservator[observators[observatorIndex].etagCounter++] = &globalEtags[globalEtagIndex];
+                          
+                          /* uzupełnij sesje */
+                          sessions[createdSessionNumber].etag = &globalEtags[globalEtagIndex];
+                          sessions[createdSessionNumber].etag->timestamp = (millis() / 1000);
+                          sessions[createdSessionNumber].sessionTimestamp = sessions[createdSessionNumber].etag->timestamp;
+    
+                          /* wysylamy wiadomosc 2.05 content z nowym etagiem i paylodem */
+                          sendEtagResponse(createdSessionNumber, false, 255);
+                          break;
+                        }
+                        /* brak wolnej sesji */
+                        else {
+                          /* wysylamy wiadomosc 2.05 z nowa wartoscia znacznika, opcja content type i observe */
+                          sendContentResponse(resourceNumber, true, 255); 
+                          break;
+                        }
+                    }
+                    /* klient nie ma miejsca na dodanie nowego etaga */
+                    else{
+                      /* wysylam wiadomosc 2.05 contenet bez etaga*/
+                      Serial.println(F("**{ klient nie ma miejsca na dodanie nowego etaga }"));
+                      sendContentResponse(resourceNumber, true, 255);
+                    }
+                  }
+                  /* brak miejsca */
+                    else {
+                      Serial.println(F("**{ brak miejsca w globalnych  }"));
+                      sendContentResponse(resourceNumber, true, 255);
+                      break;
+                    }
+                  }
+                }
+                                
+              }
+            }           
+          
+          Serial.println(F("**{koniec}"));
         }
       }
       // jeżeli nie odnaleźliśy zasobu to porzucamy wiadomość
