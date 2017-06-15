@@ -44,7 +44,7 @@ const uint8_t PUT_TYPE = 2;
 // zmienne dotyczące połączenia ethernetowego;
 EthernetUDP Udp;
 byte mac[] = {00, 0xaa, 0xbb, 0xcc, 0xde, 0xf3};
-IPAddress ip(192, 168, 0, 33);
+IPAddress ip(192, 168, 2, 33);
 const short localPort = 5683;
 const uint8_t MAX_BUFFER = 50;
 char ethMessage[MAX_BUFFER];
@@ -70,9 +70,6 @@ uint16_t messageId = 0; //globalny licznik, inkrementowana za każdym razem gdy 
 
 
 void setup() {
-  SPI.begin();
-  Serial.begin(9600);
-
   /* inicjalizacja komunikacji radiowej */
   radio.begin();
   network.begin(RF_CHANNEL, THIS_NODE_ID);
@@ -83,8 +80,6 @@ void setup() {
 
   /* inicjalizacja listy zasobów predefiniowanych na serwerze */
   initializeResourceList();
-
-  Serial.println(F("[setup]->READY"));
 }
 void loop() {
   /* regularne sprawdzanie bufora komunikacji radiowej */
@@ -94,21 +89,14 @@ void loop() {
   /* regularne sprawdzanie bufora komunikacji przewodowej */
   receiveEthernetMessage();
 
-  /*  */
-  for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
-    if( sessions[sessionNumber].details < 128 && ((millis() - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT)) {
-
-      Serial.println(F("NIEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"));
-      Serial.println(millis());
-      Serial.println(sessions[sessionNumber].sessionTimestamp);
-      sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
-
-      //sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
-
-      sessions[sessionNumber].sessionTimestamp = millis();
-      sessions[sessionNumber].messageID = messageId++;
-    }
-  }
+//  /*  */
+//  for (int sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++ ) {
+//    if( sessions[sessionNumber].details < 128 && (((millis()/1000) - sessions[sessionNumber].sessionTimestamp) > CON_TIMEOUT/1000)) {
+//      sendEtagResponse(sessionNumber,sessions[sessionNumber].details & 0x01, 255);
+//      sessions[sessionNumber].sessionTimestamp = (millis() / 1000);
+//      sessions[sessionNumber].messageID = messageId++;
+//    }
+//  }
 }
 
 // Resources:Methodes---------------------------
@@ -650,8 +638,6 @@ void receiveGetRequest() {
       - zmieniamy stan obserwatora na wolny (usuwamy klienta)
 */
 void receiveEmptyRequest() {
-  Serial.println(F("[RECEIVE][COAP]->receiveEmptyRequest"));
-
   /* przeszukujemy listę sesji */
   for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
     /* szukamy sesji zajętej */
@@ -661,7 +647,6 @@ void receiveEmptyRequest() {
           /* znaleźliśmy sesję związana z danym klientem */
           
           if ( parser.parseType(ethMessage) == TYPE_ACK ) {
-            Serial.println(F("[RECEIVE][COAP]->kasuje sesji:"));
             /* zmień status sesji na wolny */
             sessions[sessionNumber].details = 128;      
             
@@ -783,8 +768,6 @@ void sendContentResponse(uint8_t resourceNumber, bool addObserveOption, uint8_t 
    - nie ma argumentu payload, ponieważ jest on w pewnym sensie stały (well-know-core)
 */
 void sendWellKnownContentResponse(uint8_t blockValue) {
-  Serial.println(F("[SEND][COAP][WELL_KNOWN]"));
-
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
@@ -800,7 +783,6 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
 
   builder.setOption(CONTENT_FORMAT, LINK_FORMAT);
 
-  Serial.println(F("[SEND][COAP][WELL_KNOWN]option"));
   /*narazie zakładamy ze bloki beda 64bitowe, wiec blokow w naszym przypadku zawsze bedzie mniej niz 16 ((blockNumber & 0x0f) << 4)
      cztery najstrasze bity okreslaja numer bloku,
      3 najmlodsze okreslaja rozmiar bloku
@@ -813,20 +795,13 @@ void sendWellKnownContentResponse(uint8_t blockValue) {
   for (int i = 1; i < 4 + (blockValue & 0x07); i++) {
     blockSize *= 2;
   }
-  //  Serial.println(blockSize);
   blockString[1] = '\0';
-  //  Serial.println(resources[0].size);
-  //  Serial.println(((blockValue & 0xf0) >> 4));
-  //  Serial.println(blockSize * ((blockValue & 0xf0) >> 4));
-  //  Serial.println(resources[0].size - blockSize * ((blockValue & 0xf0) >> 4));
   if (resources[0].size > blockSize * (((blockValue & 0xf0) >> 4) + 1)) {
     // 8 - ustawiamy 4. najmłodszy bit na 1, jeśli jest jeszcze cos do wysłania
     blockString[0] = (blockValue & 0xf7) + 8;
   } else {
     blockString[0] = (blockValue & 0xf7);
   }
-  ///  Serial.println(blockValue & 0xf7);
-  //Serial.println(blockString[0], BIN);
   builder.setOption(BLOCK2, blockString);
 
   setWellKnownCorePayload((blockValue & 0xf0) >> 4, blockSize);
@@ -911,7 +886,6 @@ void sendEmptyAckResponse(uint8_t sessionNumber) {
     - kod wiadomości: 2.04 suc
 */
 void sendPutResponse(uint8_t sessionNumber, uint8_t value) {
-  Serial.println(F("sendPutResponse"));
   builder.init();
   builder.setVersion(DEFAULT_SERVER_VERSION);
   builder.setType(TYPE_NON);
@@ -948,9 +922,14 @@ void getCharValueFromResourceValue(char* charValue, unsigned long value, uint8_t
         charValue[0] = value / 10 + '0';
         charValue[1] = (value % 10) + '0';
         charValue[2] = '\0';
+        charValue[3] = '\0';
+        charValue[4] = '\0';
       } else {
         charValue[0] = value + '0';
         charValue[1] = '\0';
+        charValue[2] = '\0';
+        charValue[3] = '\0';
+        charValue[4] = '\0';
       }
       break;
     case 1:
@@ -959,9 +938,14 @@ void getCharValueFromResourceValue(char* charValue, unsigned long value, uint8_t
         charValue[0] = value / 10;
         charValue[1] = (value % 10);
         charValue[2] = '\0';
+        charValue[3] = '\0';
+        charValue[4] = '\0';
       } else {
         charValue[0] = value;
         charValue[1] = '\0';
+        charValue[2] = '\0';
+        charValue[3] = '\0';
+        charValue[4] = '\0';
       }
       break;
   }
@@ -1150,7 +1134,6 @@ bool setWellKnownCorePartToPayload(uint8_t* freeLen, uint8_t blockNumber, char* 
     - wyślij żądanie zmiany stanu zasobu do obiektu IoT;
 */
 void receivePutRequest() {
-  Serial.println(F("receivePutRequest"));
   uint8_t optionNumber = parser.getFirstOption(ethMessage, messageLen);
   char uriPath[20] = "";
   if ( optionNumber != URI_PATH ) {
@@ -1183,12 +1166,7 @@ void receivePutRequest() {
     strcat(uriPath, parser.fieldValue);
     optionNumber = parser.getNextOption(ethMessage, messageLen);
   }
-  Serial.println(F("URIIII"));
-  Serial.println(uriPath);
-  Serial.println(optionNumber);
-  Serial.println(parser.fieldValue[0]);
   while (optionNumber != CONTENT_FORMAT)  {
-    Serial.println(F("WHILE"));
     //nie ma content-format! BLAD
     if (optionNumber > CONTENT_FORMAT || optionNumber == NO_OPTION) {
       sendErrorResponse(BAD_REQUEST, "NO CONTENT-FORMAT");
@@ -1199,7 +1177,7 @@ void receivePutRequest() {
 
   // sprawdzamy zawartość opcji ContentFormat
   if (parser.fieldValue[0] != PLAIN_TEXT[0]) {
-    sendErrorResponse(BAD_REQUEST, "BAD content value: only text/plain allowed");
+    sendErrorResponse(BAD_REQUEST, "BAD CONTENT VALUE: ONLY TEXT/PLAIN ALLOWED");
     return;
   }
   //sparsowaliśmy uri - szukamy zasobu na serwerze
@@ -1213,19 +1191,15 @@ void receivePutRequest() {
         sessions[sessionNumber].messageID = parser.parseMessageId(ethMessage);
         sessions[sessionNumber].sensorID = ((resources[resourceNumber].flags & 0x0c) >> 2 );
         sessions[sessionNumber].details = B00100000;
-        sessions[sessionNumber].sessionTimestamp = millis();
+        sessions[sessionNumber].sessionTimestamp = (millis()/1000);
         sessions[sessionNumber].tokenLen =  parser.parseTokenLen(ethMessage);
         // szukamy opcji ContentFormat
 
 
         // sprawdzamy wartość pola Type, jeżeli jest to CON to wysyłamy puste ack, jeżeli NON to kontynuujemy
         if ( parser.parseType(ethMessage) == TYPE_CON ) {
-          Serial.println(F("CON"));
           sendEmptyAckResponse(sessionNumber);
         }
-        Serial.println(F("NON"));
-        Serial.println(parser.parsePayload(ethMessage, messageLen)[0]);
-        Serial.println(parser.parsePayload(ethMessage, messageLen)[0] - '0');
         //sendPutResponse(sessionNumber, 2);
         // wysyłamy żądanie zmiany zasobu do obiektu IoT wskazanego przez uri
         sendMessageToThing(PUT_TYPE, sessions[sessionNumber].sensorID, parser.parsePayload(ethMessage, messageLen)[0] - '0');
@@ -1269,10 +1243,7 @@ void receivePutRequest() {
     - jeżeli jest jakaś sesja związana z danym sensorID to przekaż ją do analizy;
 */
 void getMessageFromThing(byte message) {
-  Serial.println(F("[RECEIVE][MINI]->Start"));
-  Serial.println(message, BIN);
   if ( ((message & 0xc0) >> 6) == RESPONSE_TYPE ) {
-    Serial.println(F("RESPONSE_TYPE"));
     for (uint8_t resourceNumber = 0; resourceNumber < RESOURCES_COUNT; resourceNumber++) {
       // odnajdujemy sensorID w liście zasobów serwera
       if ( ((message & 0x38) >> 3) == ((resources[resourceNumber].flags & 0x1c) >> 2) ) {
@@ -1280,8 +1251,6 @@ void getMessageFromThing(byte message) {
         if( ((message & 0x38) >> 3) == 1 ){
           /* aktualizacja znacznika czasowego zwiazanego z lampka */
           resources[resourceNumber].value = millis() % 10;
-          Serial.println(F("aktualizujemy zawartość value w zasobie"));
-          Serial.println(resources[resourceNumber].value);
         }
         else {
           /* aktualizacja wartosci pozostalych zasobow */
@@ -1291,16 +1260,10 @@ void getMessageFromThing(byte message) {
         // przeszukujemy tablicę sesji w poszukiwaniu sesji związanej z danym sensorID
         // jeżeli sesja jest aktywna i posiada sensorID równe sensorID z wiadomości to przekazujemy ją do analizy
         for (uint8_t sessionNumber = 0; sessionNumber < MAX_SESSIONS_COUNT; sessionNumber++) {
-         Serial.println(sessionNumber);
-          Serial.println(sessions[sessionNumber].details);
           if ( ((sessions[sessionNumber].details & 0x80) < 128)
                && ((sessions[sessionNumber].sensorID == ((message & 0x38) >> 3))) ) {
-                Serial.println(F("IFIFIFIFIIFFIFIIF"));
             if ( ((sessions[sessionNumber].details & 0x60) >> 5) == 1 ) {
-              // PUT
-              Serial.println(F("getMessageFromThing->PUT"));
-              Serial.println(message & 0x07);
-              
+              // PUT            
               sendPutResponse(sessionNumber, message & 0x07);
 
               /* zmień stan sesji na wolny */
@@ -1310,27 +1273,19 @@ void getMessageFromThing(byte message) {
         }
 
         /* jeżeli zasob jest obserwowalny, to wyslij do wszystkich obserwatorow wiadomosc o zmianie stanu */
-        if ((resources[resourceNumber].flags & 0x02 >> 1) == 1 ){
-            Serial.println(F("**{start}"));
-            
+        if ((resources[resourceNumber].flags & 0x02 >> 1) == 1 ){       
             uint8_t globalEtagIndex = MAX_ETAG_COUNT + 1;
             uint8_t createdSessionNumber = 0;
             /* przeszukuje listę obserwatorow w poszukiwaniu aktywnych klientow */
             for ( uint8_t observatorIndex=0; observatorIndex < MAX_OBSERVATORS_COUNT; observatorIndex++ ){
-              if ( observators[observatorIndex].resource == &resources[resourceNumber] ){
-                Serial.println(F("**{obserwator}"));
-                Serial.println(observatorIndex);
-                
+              if ( (observators[observatorIndex].resource == &resources[resourceNumber])&& (observators[observatorIndex].details < 128)){         
                 /* sprawdz, czy klient ma znany etag z ta wartoscia */
                 boolean etagFound = false;
 
                 /* przeszukiwanie lokalnej tablicy etagow obserwatora */
                 for ( uint8_t obsEtagIndex=0; obsEtagIndex < MAX_ETAG_CLIENT_COUNT; obsEtagIndex++ ){
-                  if ( observators[observatorIndex].etagsKnownByTheObservator[obsEtagIndex]-> savedValue == resources[resourceNumber].value){
-                     Serial.println(F("**{obserwator zna etaga}"));
-                     Serial.println(observators[observatorIndex].etagsKnownByTheObservator[obsEtagIndex]->etagId);
-                    
-                    /* klient zna etaga, z obecna wartoscia - wysylamy 2.03 valid*/
+                  if ( observators[observatorIndex].etagsKnownByTheObservator[obsEtagIndex]-> savedValue == resources[resourceNumber].value){                   
+                   /* klient zna etaga, z obecna wartoscia - wysylamy 2.03 valid*/
                     etagFound = true;
                     
                     /* szukamy wolnej sesji */
@@ -1361,8 +1316,6 @@ void getMessageFromThing(byte message) {
                   /* przeszukaj liste globalnych etagow */
                   for ( uint8_t globalIndex=0; globalIndex < MAX_ETAG_COUNT; globalIndex++ ){
                     if ( globalEtags[globalIndex].savedValue == resources[resourceNumber].value ) {
-                      Serial.println(F("**{znaleziono globalny etag}"));
-                      Serial.println(globalIndex);
                       
                       /* znaleziono etag na liscie globalnej */
                       globalEtagIndex = globalIndex;
@@ -1374,8 +1327,6 @@ void getMessageFromThing(byte message) {
 
                         /* znaleziono wolna sesje */
                         if ( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
-                            Serial.println(F("**{znaleziono globalny etag}{znaleziono wolna sesje}"));
-                            Serial.println(createdSessionNumber);
                           
                           /* stworz nowy wpis na liscie znanych etagow klientowi */
                           observators[observatorIndex].etagsKnownByTheObservator[globalEtagsCounter++] = &globalEtags[globalIndex];
@@ -1398,7 +1349,6 @@ void getMessageFromThing(byte message) {
                       }
                       /* brak miejsca u klienta */
                       else {
-                        Serial.println(F("**brak miejsca w lokalnej tablicy etaga}"));
                         sendContentResponse(resourceNumber, true, 255);
                         break;
                       }                   
@@ -1407,7 +1357,6 @@ void getMessageFromThing(byte message) {
 
                   /* brak etaga na liscie globalnej */
                   if ( globalEtagIndex == MAX_ETAG_COUNT + 1){
-                    Serial.println(F("**{brak etaga na liscie globalnej}"));
                     /*sprawdzamy, czy jest miejsce na liscie globalnej */
                     
                     /* mamy miejsce */
@@ -1422,8 +1371,6 @@ void getMessageFromThing(byte message) {
                       globalEtagIndex = globalEtagsCounter;
                       globalEtagsCounter++;
 
-                      Serial.println(F("**{ dodajemy nowy wpis do listy globalnej }"));
-
                       /* sprawdzamy, czy klient ma miejsce na dodanie nowego etaga */
                       if ( observators[observatorIndex].etagCounter < MAX_ETAG_CLIENT_COUNT ){
                         /* szukamy wolnej sesji */
@@ -1431,7 +1378,6 @@ void getMessageFromThing(byte message) {
                         
                         /* znaleziono wolna sesje */
                         if ( createdSessionNumber != MAX_SESSIONS_COUNT + 1 ) {
-                          Serial.println(F("**{ dodajemy nowy wpis do listy globalnej }"));
                           
                           /* stworz nowy wpis na liscie znanych etagow klientowi */
                           observators[observatorIndex].etagsKnownByTheObservator[observators[observatorIndex].etagCounter++] = &globalEtags[globalEtagIndex];
@@ -1455,13 +1401,11 @@ void getMessageFromThing(byte message) {
                     /* klient nie ma miejsca na dodanie nowego etaga */
                     else{
                       /* wysylam wiadomosc 2.05 contenet bez etaga*/
-                      Serial.println(F("**{ klient nie ma miejsca na dodanie nowego etaga }"));
                       sendContentResponse(resourceNumber, true, 255);
                     }
                   }
                   /* brak miejsca */
                     else {
-                      Serial.println(F("**{ brak miejsca w globalnych  }"));
                       sendContentResponse(resourceNumber, true, 255);
                       break;
                     }
@@ -1470,8 +1414,6 @@ void getMessageFromThing(byte message) {
                                 
               }
             }           
-          
-          Serial.println(F("**{koniec}"));
         }
       }
       // jeżeli nie odnaleźliśy zasobu to porzucamy wiadomość

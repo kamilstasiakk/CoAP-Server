@@ -13,7 +13,7 @@
 
 const uint16_t CON_TIMEOUT = 5000;
 const uint8_t RESOURCES_COUNT = 6;
-const uint8_t MAX_SESSIONS_COUNT = 2;
+const uint8_t MAX_SESSIONS_COUNT = 3;
 const uint8_t MAX_ETAG_COUNT = 2; 	//globalnie
 const uint8_t MAX_ETAG_CLIENT_COUNT = 2;	//u obserwatora
 const uint8_t MAX_OBSERVATORS_COUNT = 2;
@@ -69,20 +69,25 @@ const uint8_t DETAIL_CHANGED = 4;
 const uint8_t DEFAULT_SERVER_VERSION = 1;
 
 
-
-
-
+/**
+* Struktura przechowująca wszystkie informacje na temat zasobu
+* - uri: identyfikator zasobu;
+* - resourceType: typ zasobu;
+* - interfaceDescription: opis wartości zwracanej;
+* - value: przypisany stan zasobu;
+* - size: rozmiar stanu zasobu (potrzebne przy opcji blokowej);
+*/
 struct Resource {
   char* uri;
   char* resourceType;
   char* interfaceDescription;
-  unsigned long value;  // jedna z możliwych reprezentacji
+  unsigned long value;
   uint16_t size;
   /*
      7 6 5 | 4 3 2 |   1  |    0
            |   ID  |  PUT | OBSERVE
 
-     ID      - wartości 0-7
+     ID      - wartości 0-7 (id w komunikacji radiowej)
      PUT    - 0.cannot / 1.can
      OBSERVE - 0.cannot / 1.can
   */
@@ -95,12 +100,10 @@ struct Resource {
    - resource: wskaźnik na zasób na serwerze, którego dotyczy dany ETag;
    - savedValue: wartość zasobu przypisaną do danego ETaga;
    - etagId: identyfikator danego etaga;
-   - timestamp: znacznik czasowy ostatniego użycia (potrzebny do mechanizmu nadpisywania)
+   - timestamp: znacznik czasowy ostatniego użycia
    - details:
       - stan obiektu (0 aktywny ,1 wolny - można nadpisać daną strukture nową)
       - typ obiektu (json, xml lub plain text)
-
-   Jeżeli currentTime-timestamp > x to zmieniamy stan na nonactive i możemyn nadpisać dany wpis
 */
 struct Etag {
   Resource* resource;
@@ -108,7 +111,6 @@ struct Etag {
   uint8_t etagId;
   uint8_t timestamp;
 
-  // token wyjmujemy z geta
   /*
       7     |6 5 |   4 3 2 1 0   |
                  | CONTENT_TYPE  |
@@ -166,7 +168,7 @@ struct Observator {
    - details:
       - stan: stan wpisu, aktywny 0, wolny 1 (możliwy do nadpisania)
       - typ: typ sesji, czy związana z wiadomością put czy mechanizmem CON
-      - content_type: reprezentacja zasobu (chyba niepotrzebne)
+      - content_type: reprezentacja zasobu
 
 */
 struct Session {
